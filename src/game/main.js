@@ -53,6 +53,11 @@ let fpsSmooth = 60;
 /**
  * Go fullscreen when a run starts.
  *
+ * Off by default: a background game has no business taking over the screen, and
+ * "any device that reports a touch digitiser" includes plenty of ordinary
+ * laptops.  It is opt-in from the developer screen, and even then only tries on
+ * touch devices.
+ *
  * Must be called from inside a user-gesture turn, which is exactly where
  * `startPlay()` runs from.  Orientation is deliberately NOT locked: the
  * hand-held layout is playable in both, and forcing a rotation is intrusive.

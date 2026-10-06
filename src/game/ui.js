@@ -106,7 +106,7 @@ export const DEV_SPECS = [
   { group: '画面', key: 'backgroundDim', label: '整体压暗', type: 'range', min: 0, max: 0.95, step: 0.01, fmt: (v) => v.toFixed(2) },
   { group: '画面', key: 'visualizer', label: '频谱可视化', type: 'bool' },
   { group: '画面', key: 'showKeyCues', label: '键位提示', type: 'bool' },
-  { group: '画面', key: 'fullscreenOnStart', label: '开局全屏', type: 'bool' },
+  { group: '画面', key: 'fullscreenOnStart', label: '开局全屏', hint: '默认关；开着时只对触屏设备生效', type: 'bool' },
 
   {
     group: '手感',

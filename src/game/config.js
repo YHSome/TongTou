@@ -345,7 +345,7 @@ export const DEFAULTS = {
   showOffsetGuide: false,  // forced on briefly while the offset slider is moved
   renderScale: 'auto',     // 'auto' already targets 4K on desktop, 2.4 MP on phones
   layout: 'auto',          // decides BMS strip vs full-width lanes
-  fullscreenOnStart: true,
+  fullscreenOnStart: false, // opt in from the developer screen; see MIGRATIONS
   noFail: true,            // practice mode: the gauge cannot end a run
   hitGain: 0.7,            // hit-tick level relative to the music volume
   autoPlay: false,         // F2 toggles this at runtime, and it is never saved
@@ -420,6 +420,22 @@ const KEY = 'tongtou.settings.v1';
  */
 const EPHEMERAL = new Set(['autoPlay']);
 
+/**
+ * Default changes that have to reach players who already saved the old value.
+ *
+ * Flipping a constant in `DEFAULTS` only affects people who have never touched
+ * the settings screen: everyone else has the whole blob written out, so the
+ * stored value wins and the new default is dead on arrival.  Each entry is a
+ * migration applied to a blob stamped with the revision *before* it.
+ */
+const SETTINGS_REV = 1;
+const MIGRATIONS = [
+  // rev 0 -> 1: starting a run used to grab fullscreen on any device that
+  // reported a touch digitiser, which includes plenty of ordinary laptops.
+  // A background game has no business taking over the screen.
+  (s) => { s.fullscreenOnStart = false; },
+];
+
 export function loadSettings() {
   let stored = {};
   try {
@@ -433,6 +449,10 @@ export function loadSettings() {
     if (k in stored) merged[k] = stored[k];
   }
   merged.laneKeys = normalizeKeys(stored.laneKeys);
+
+  const rev = Number(stored.rev) || 0;
+  for (let i = rev; i < MIGRATIONS.length; i++) MIGRATIONS[i](merged);
+  merged.rev = SETTINGS_REV;
   return merged;
 }
 
@@ -442,6 +462,7 @@ export function saveSettings(s) {
     for (const k of Object.keys(s)) {
       if (!EPHEMERAL.has(k)) out[k] = s[k];
     }
+    out.rev = SETTINGS_REV;
     localStorage.setItem(KEY, JSON.stringify(out));
   } catch {
     /* private mode — settings just won't persist */

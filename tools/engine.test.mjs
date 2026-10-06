@@ -587,6 +587,28 @@ section('settings persistence');
   ok('a stale AUTO=true blob is ignored too', loadSettings().autoPlay === false);
   ok('...without discarding its other keys', loadSettings().volume === 0.7);
 
+  // ---- a changed default has to reach people who already saved the old one --
+  // Writing the whole settings object out means a stored value always beats a
+  // new DEFAULTS value, so changing a default without a migration only ever
+  // affects fresh installs.  That is exactly how "开局不要自动全屏" would have
+  // silently failed to arrive.
+  store.set('tongtou.settings.v1',
+    JSON.stringify({ ...defaultSettings(), fullscreenOnStart: true }));   // rev 0 blob
+  ok('a default is off out of the box', defaultSettings().fullscreenOnStart === false);
+  ok('an old blob carrying the previous default is migrated',
+    loadSettings().fullscreenOnStart === false);
+  ok('the migration stamps the blob so it only runs once',
+    loadSettings().rev === 1, String(loadSettings().rev));
+
+  // ...but a choice made *after* the migration is a choice, and must stick
+  const picked = loadSettings();
+  picked.fullscreenOnStart = true;
+  saveSettings(picked);
+  ok('a deliberate choice made after the migration is kept',
+    loadSettings().fullscreenOnStart === true);
+  ok('and it is stamped as current, so it will not be migrated again',
+    JSON.parse(store.get('tongtou.settings.v1')).rev === 1);
+
   delete globalThis.localStorage;
 }
 

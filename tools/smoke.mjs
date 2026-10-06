@@ -284,8 +284,30 @@ async function main() {
       (await cdp.eval('window.TONGTOU.state.difficulty')) === 'hard',
       await cdp.eval('window.TONGTOU.state.difficulty'));
 
+    // A run must not take over the screen.  `fullscreenOnStart` is off by
+    // default, and the spy stays in place for the whole run so any request from
+    // anywhere in the start path would be caught.
+    await cdp.eval(`(() => {
+      window.__fs = { asked: 0, args: null };
+      const el = document.documentElement;
+      el.requestFullscreen = function (...a) { window.__fs.asked++; window.__fs.args = a; return Promise.resolve(); };
+      el.webkitRequestFullscreen = el.requestFullscreen;
+      return true;
+    })()`);
+    check('fullscreen is off by default',
+      (await cdp.eval('window.TONGTOU.state.settings.fullscreenOnStart')) === false,
+      String(await cdp.eval('window.TONGTOU.state.settings.fullscreenOnStart')));
+
     await sendKey('Enter', 'Enter', 13, '\r');     // select -> play
-    await sleep(600);
+    await sleep(900);
+    check('starting a run does not ask for fullscreen',
+      (await cdp.eval('window.__fs.asked')) === 0,
+      `${await cdp.eval('window.__fs.asked')} request(s)`);
+
+    // The opt-in half of this is checked at the very end of the suite: proving
+    // it needs a restart, and restarting here would wipe the run the AUTO
+    // scoring section below measures.
+
     let nowMode = await cdp.eval('window.TONGTOU.state.mode');
     check('started gameplay', nowMode === 'play', `mode=${nowMode}`);
     check('trusted gesture resumed the audio context',
@@ -1450,6 +1472,36 @@ async function main() {
     check('and clears the stored flag',
       (await cdp.eval('localStorage.getItem("tongtou.dev.v1")')) === null,
       String(await cdp.eval('localStorage.getItem("tongtou.dev.v1")')));
+
+    /* ---- the fullscreen opt-in still works ----------------------------- */
+    // Last, because proving it needs a restart.  This is the other half of
+    // "starting a run must not take over the screen": the default is off, but
+    // the developer switch can still turn it on.
+    console.log('\n== fullscreen opt-in ==');
+
+    await cdp.eval(`(() => {
+      // the developer section reloaded the page, so the spy has to be re-armed
+      window.__fs = { asked: 0 };
+      const el = document.documentElement;
+      el.requestFullscreen = function () { window.__fs.asked++; return Promise.resolve(); };
+      el.webkitRequestFullscreen = el.requestFullscreen;
+      window.TONGTOU.state.settings.fullscreenOnStart = true;
+      Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true });
+      return true;
+    })()`);
+    await cdp.eval('window.TONGTOU.startPlay(); true');
+    await sleep(1500);
+    check('opting in still requests fullscreen on a touch device',
+      (await cdp.eval('window.__fs.asked')) >= 1,
+      `${await cdp.eval('window.__fs.asked')} request(s)`);
+
+    await cdp.eval(`(() => {
+      window.TONGTOU.state.settings.fullscreenOnStart = false;
+      delete navigator.maxTouchPoints;
+      window.TONGTOU.pausePlay();
+      return true;
+    })()`);
+    await sleep(400);
 
     /* ---- AUTO must not survive a reload -------------------------------- */
     // Last, because a reload throws away the run everything above depends on.
