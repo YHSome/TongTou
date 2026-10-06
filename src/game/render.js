@@ -1089,13 +1089,24 @@ export class Renderer {
     c.fillStyle = 'rgba(200,220,255,0.5)';
     c.fillText(`MAX ${engine.maxCombo}`, W - inset, cy);
 
-    if ((settings.showOffsetGuide || this.debugTiming) && engine.lastJudge) {
+    // The ±ms readout is on by default: seeing how early or late you are hitting
+    // only helps *while playing*, which is the opposite of how this used to work
+    // (it appeared only when the offset slider moved).  FPS and resolution stay
+    // behind `debugTiming` — those are developer noise.  Both share one line, so
+    // the bar never grows a second row.
+    const showErr = settings.showOffsetGuide && engine.lastJudge;
+    if (this.debugTiming || showErr) {
+      const parts = [];
+      if (this.debugTiming) parts.push(`${Math.round(state.fps || 0)} FPS · ${this.W}×${this.H}`);
+      if (showErr) {
+        parts.push(`${engine.lastErrorMs >= 0 ? '+' : ''}${engine.lastErrorMs.toFixed(0)} ms`);
+      }
       c.textAlign = 'right';
-      c.fillStyle = 'rgba(150,175,215,0.7)';
+      c.fillStyle = showErr
+        ? hexA(JUDGE_COLORS[engine.lastJudge] || '#fff', 0.85)
+        : 'rgba(150,175,215,0.7)';
       c.font = `500 ${small}px ${MONO}`;
-      c.fillText(`${Math.round(state.fps || 0)} FPS · ${this.W}×${this.H}`
-        + ` · ${engine.lastErrorMs >= 0 ? '+' : ''}${engine.lastErrorMs.toFixed(0)}ms`,
-      W - inset, barTop + small * 1.2);
+      c.fillText(parts.join(' · '), W - inset, barTop + small * 1.2);
       c.textAlign = 'left';
     }
 
@@ -1239,21 +1250,27 @@ export class Renderer {
     c.fillText(fmtTime(timeline.duration), L.fieldX + pw, py + H * 0.028);
     c.textAlign = 'left';
 
-    // ---- live timing readout (useful while calibrating) ------------------ */
-    if (settings.showOffsetGuide || this.debugTiming) {
+    // ---- live timing readout --------------------------------------------- */
+    // Split the same way as the hand-held bar: the error in ms is a player
+    // readout (on by default), the frame rate is a developer one.
+    if (this.debugTiming) {
       c.textAlign = 'right';
       c.fillStyle = 'rgba(150,175,215,0.55)';
       c.font = `500 ${Math.round(H * 0.0125)}px ${MONO}`;
-      c.fillText(`${Math.round(state.fps || 0)} FPS · ${this.W}×${this.H}`, L.fieldX + pw, L.fieldTop - H * 0.030);
-      if (engine.lastJudge) {
-        const err = engine.lastErrorMs;
-        if (err !== undefined) {
-          c.fillStyle = hexA(JUDGE_COLORS[engine.lastJudge] || '#fff', 0.9);
-          c.font = `600 ${Math.round(H * 0.015)}px ${MONO}`;
-          c.fillText(`${err >= 0 ? '+' : ''}${err.toFixed(1)} ms`, L.fieldX + pw, L.fieldTop - H * 0.012);
-        }
-      }
+      c.fillText(`${Math.round(state.fps || 0)} FPS · ${this.W}×${this.H}`,
+        L.fieldX + pw, L.fieldTop - H * 0.030);
       c.textAlign = 'left';
+    }
+    if (settings.showOffsetGuide && engine.lastJudge) {
+      const err = engine.lastErrorMs;
+      if (err !== undefined) {
+        c.textAlign = 'right';
+        c.fillStyle = hexA(JUDGE_COLORS[engine.lastJudge] || '#fff', 0.9);
+        c.font = `600 ${Math.round(H * 0.015)}px ${MONO}`;
+        c.fillText(`${err >= 0 ? '+' : ''}${err.toFixed(1)} ms`,
+          L.fieldX + pw, L.fieldTop - H * 0.012);
+        c.textAlign = 'left';
+      }
     }
   }
 

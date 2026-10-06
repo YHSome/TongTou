@@ -19,7 +19,7 @@ import { Input } from '../src/game/input.js';
 import {
   WINDOW, GAUGE_MAX, GAUGE_START, JUDGE_INFO, PRECISION_MAX_MS,
   DEFAULT_KEYS, KEY_PRESETS, codeLabel, isReservedKey, normalizeKeys, presetFor,
-  defaultSettings, DEFAULTS, loadSettings, saveSettings,
+  defaultSettings, DEFAULTS, loadSettings, saveSettings, SETTINGS_REV,
 } from '../src/game/config.js';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -614,7 +614,7 @@ section('settings persistence');
   ok('an old blob carrying the previous default is migrated',
     loadSettings().fullscreenOnStart === false);
   ok('the migration stamps the blob so it only runs once',
-    loadSettings().rev === 1, String(loadSettings().rev));
+    loadSettings().rev === SETTINGS_REV, `${loadSettings().rev} vs ${SETTINGS_REV}`);
 
   // ...but a choice made *after* the migration is a choice, and must stick
   const picked = loadSettings();
@@ -623,7 +623,21 @@ section('settings persistence');
   ok('a deliberate choice made after the migration is kept',
     loadSettings().fullscreenOnStart === true);
   ok('and it is stamped as current, so it will not be migrated again',
-    JSON.parse(store.get('tongtou.settings.v1')).rev === 1);
+    JSON.parse(store.get('tongtou.settings.v1')).rev === SETTINGS_REV);
+
+  // rev 1 -> 2: the live ±ms readout used to be off unless you dragged the
+  // offset slider.  A blob from that build must pick up the new default too,
+  // and it must not re-run the earlier migration on the way.
+  store.set('tongtou.settings.v1',
+    JSON.stringify({ ...defaultSettings(), rev: 1, showOffsetGuide: false, fullscreenOnStart: true }));
+  const fromRev1 = loadSettings();
+  ok('a rev-1 blob picks up the newer default too', fromRev1.showOffsetGuide === true);
+  ok('...and is brought all the way to the current revision',
+    fromRev1.rev === SETTINGS_REV, String(fromRev1.rev));
+  ok('...without re-running the migrations it already had',
+    fromRev1.fullscreenOnStart === true,
+    'a rev-1 blob kept its own fullscreen choice');
+  ok('the live readout is on out of the box', defaultSettings().showOffsetGuide === true);
 
   delete globalThis.localStorage;
 }

@@ -118,7 +118,7 @@ export const DEV_SPECS = [
     key: 'hitFx', label: '打击反馈', type: 'select',
     options: [['off', '关闭'], ['normal', '普通'], ['strong', '强烈']],
   },
-  { group: '手感', key: 'showOffsetGuide', label: '实时判定偏差', hint: '拖动「判定偏移」时本来就会自动出现 4 秒', type: 'bool' },
+  { group: '手感', key: 'showOffsetGuide', label: '实时判定偏差', hint: '默认开；每次判定后显示偏早/偏晚多少毫秒，方便边打边调偏移', type: 'bool' },
   { group: '手感', key: 'noFail', label: '练习模式', hint: '血条归零也不会失败', type: 'bool' },
 
   {

@@ -320,6 +320,58 @@ async function main() {
       (await cdp.eval('window.TONGTOU.audio.ctx.state')) === 'running',
       await cdp.eval('window.TONGTOU.audio.ctx.state'));
 
+    // ---- the live offset readout is on by default ------------------------
+    // "实时调整判定偏移" only helps while you are playing, so it has to be on
+    // without anyone opening a menu.  Counted from the canvas rather than from
+    // the settings flag: the flag being true proves nothing if nothing draws.
+    {
+      check('the live offset readout is on out of the box',
+        (await cdp.eval('window.TONGTOU.state.settings.showOffsetGuide')) === true);
+      const readout = JSON.parse(await cdp.eval(`(() => {
+        const r = window.TONGTOU.renderer, eng = window.TONGTOU.engine;
+        const tl = eng.timeline, settings = window.TONGTOU.state.settings;
+        const ctx = r.ctx, t = window.TONGTOU.audio.now();
+        // Give the renderer a judgement to display.  Waiting for a real one is
+        // timing-dependent, and the draw path only reads these two fields.
+        const savedJudge = eng.lastJudge, savedErr = eng.lastErrorMs;
+        eng.lastJudge = 'great'; eng.lastErrorMs = 12.3;
+
+        const texts = [];
+        const orig = ctx.fillText.bind(ctx);
+        ctx.fillText = (s, ...a) => { texts.push(String(s)); return orig(s, ...a); };
+        const state = { time: t, timeline: tl, engine: eng, settings,
+                        input: window.TONGTOU.input, audio: window.TONGTOU.audio,
+                        playing: true, fps: 60 };
+        const wasOn = settings.showOffsetGuide;
+        settings.showOffsetGuide = true;
+        r.draw(state);
+        const withGuide = texts.slice();
+
+        texts.length = 0;
+        settings.showOffsetGuide = false;
+        r.draw(state);
+        const without = texts.slice();
+
+        settings.showOffsetGuide = wasOn;
+        eng.lastJudge = savedJudge; eng.lastErrorMs = savedErr;
+        ctx.fillText = orig;
+
+        const ms = (list) => list.filter((s) => /ms$|ms\\b/.test(s)).length;
+        const fps = (list) => list.filter((s) => /FPS/.test(s)).length;
+        return JSON.stringify({
+          withGuide: ms(withGuide), without: ms(without),
+          fpsWith: fps(withGuide), sample: withGuide.filter((s) => /ms/.test(s)).slice(0, 2),
+        });
+      })()`));
+      console.log(`  offset readout: on=${readout.withGuide} off=${readout.without}`
+        + ` ${JSON.stringify(readout.sample)}`);
+      check('the readout draws the last error in ms', readout.withGuide >= 1,
+        `${readout.withGuide} matching fillText call(s)`);
+      check('turning it off stops drawing it', readout.without === 0, `${readout.without}`);
+      check('the frame-rate half stays a developer readout',
+        readout.fpsWith === 0, `${readout.fpsWith} FPS line(s) while playing normally`);
+    }
+
     // ---- auto-play a while and verify scoring ---------------------------
     await cdp.eval('window.TONGTOU.state.settings.autoPlay = true');
     await sleep(14000);

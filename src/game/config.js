@@ -342,7 +342,7 @@ export const DEFAULTS = {
   backgroundDim: 0.55,
   visualizer: true,
   showKeyCues: true,
-  showOffsetGuide: false,  // forced on briefly while the offset slider is moved
+  showOffsetGuide: true,   // live ±ms readout after each judgement
   renderScale: 'auto',     // 'auto' already targets 4K on desktop, 2.4 MP on phones
   layout: 'auto',          // decides BMS strip vs full-width lanes
   fullscreenOnStart: false, // opt in from the developer screen; see MIGRATIONS
@@ -428,12 +428,17 @@ const EPHEMERAL = new Set(['autoPlay']);
  * stored value wins and the new default is dead on arrival.  Each entry is a
  * migration applied to a blob stamped with the revision *before* it.
  */
-const SETTINGS_REV = 1;
+export const SETTINGS_REV = 2;
 const MIGRATIONS = [
   // rev 0 -> 1: starting a run used to grab fullscreen on any device that
   // reported a touch digitiser, which includes plenty of ordinary laptops.
   // A background game has no business taking over the screen.
   (s) => { s.fullscreenOnStart = false; },
+
+  // rev 1 -> 2: the live ±ms readout was off unless you dragged the offset
+  // slider, which is backwards -- the moment you most want to see how early or
+  // late you are hitting is while you are playing, not while you are in a menu.
+  (s) => { s.showOffsetGuide = true; },
 ];
 
 export function loadSettings() {
