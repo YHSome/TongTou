@@ -13,6 +13,7 @@
     "test:mobile": "node tools/mobile.mjs",
     "test:boot": "node tools/diagnose-boot.mjs",
     "test:audio": "node tools/boot-probe.mjs --no-autoplay",
+    "test:deploy": "node tools/probe-deploy.mjs",
     "shots": "node tools/shots.mjs 3840 2160",
     "chart": "python tools/analyze.py"
   }

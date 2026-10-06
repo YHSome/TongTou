@@ -3,6 +3,8 @@
 一个纯 **HTML + CSS + JavaScript** 的 4 键下落式音游（BMS 风格），目标分辨率 **3840 × 2160**。
 使用 `./src` 中提供的音乐与 BGA 视频，谱面由音频分析离线生成。
 
+**在线玩：<https://yhsome.github.io/TongTou/>** （GitHub Pages，首次加载要拉 69 MB 的 BGA 视频）
+
 ## ⚠️ 不要直接双击 index.html
 
 直接双击打开会**永远停在「正在初始化…」**。这不是 bug，而是浏览器的安全策略：
@@ -725,6 +727,49 @@ AUTO 的两半分别在两处断言：**纯逻辑**那半（`saveSettings` 不�
 旧版本留下的 `autoPlay: true` 也被忽略）在 `npm test` 里，不需要浏览器；
 **浏览器**那半（F2 开 → 顶部出现指示条 → 点一下关掉 → 刷新后仍然是关的）在
 `npm run test:browser`，手机端再补一遍「没有 F2 也能靠点指示条关掉」。
+
+### 部署健康检查
+
+前两套浏览器测试跑的都是 **localhost**，那是我们自己的服务器、路径都在原地。
+静态托管是另一个环境：站点在**子目录**里（所以每条路径都必须是相对的）、
+`.js` 该发什么 MIME 类型由托管方决定、69 MB 的视频要走公网下来。这些本地绿灯一条都覆盖不到。
+
+```bash
+npm run test:deploy                                        # 默认查线上 Pages
+node tools/probe-deploy.mjs https://example.com/tongtou/   # 或任意 URL
+```
+
+它会真的从远端 URL 启动游戏并断言：**载入的是随包发布的谱面而不是浏览器内兜底分析**、
+三个难度都在、`<video>` 拿到的是 http(s) 源而且 `networkState !== 3`（没有 404）、
+真的能开局、音频上下文真的 running、6 秒后确实有音符被判定、画布确实画了东西，
+最后把所有 **子资源 404 / console 报错**汇总成失败——子目录托管最典型的坑就是
+一条本来能用的绝对路径。
+
+实测 `https://yhsome.github.io/TongTou/`：**12/12 通过**（唯一一次 404 是可选的多曲目
+`src/manifest.json`，游戏本来就设计了找不到就回退到内置曲目）。
+
+---
+
+## GitHub Pages
+
+线上地址：**<https://yhsome.github.io/TongTou/>**
+
+托管的就是仓库根目录本身，`main` 分支直接发布（`.nojekyll` 关掉 Jekyll 处理，
+省掉一整类构建失败）。因为站点在 `/TongTou/` 子路径下，**所有资源引用都必须是相对的**——
+`index.html` 用 `./styles/game.css`、`./src/game/main.js`，谱面里的音频路径是相对谱面文件写的，
+`npm run test:deploy` 会盯着这条不变量。
+
+仓库里**没有**的东西，以及为什么：
+
+| 排除 | 原因 |
+| --- | --- |
+| `BigNaiWa/` | 那是另一个游戏（合成大奶娃），有自己的仓库 |
+| `tools/shots/` | 4K 截图约 30 MB，`npm run shots` 随时能重新生成 |
+| `tools/_analysis.wav` | `analyze.py` 的中间产物，跑一次就有了 |
+
+推送体积约 76 MB，其中 **69 MB 是 BGA 视频**。GitHub 的单文件硬上限是 100 MB，
+所以能推（会有 >50 MB 的提示）；但 Pages 的软带宽上限是 100 GB/月，
+意味着这个视频**大约够 1400 次完整加载**。真要做大，得先压视频或者改用外链。
 
 ---
 
