@@ -1,0 +1,19 @@
+{
+  "name": "tongtou-4k",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "4K falling-note (BMS-style) rhythm game running entirely in the browser",
+  "scripts": {
+    "start": "node serve.mjs",
+    "serve": "node serve.mjs",
+    "test": "node tools/engine.test.mjs",
+    "test:all": "node tools/engine.test.mjs && node tools/smoke.mjs && node tools/mobile.mjs && node tools/boot-probe.mjs --no-autoplay && node tools/diagnose-boot.mjs",
+    "test:browser": "node tools/smoke.mjs",
+    "test:mobile": "node tools/mobile.mjs",
+    "test:boot": "node tools/diagnose-boot.mjs",
+    "test:audio": "node tools/boot-probe.mjs --no-autoplay",
+    "shots": "node tools/shots.mjs 3840 2160",
+    "chart": "python tools/analyze.py"
+  }
+}

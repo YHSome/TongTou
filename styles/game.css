@@ -1,0 +1,1400 @@
+/* ==========================================================================
+   TONGTOU 4K — shell, screens and HUD chrome
+   The playfield itself is drawn on <canvas>; this file only styles the
+   surrounding DOM (menus, settings, results) and the BGA layer.
+   ========================================================================== */
+
+:root {
+  --bg: #05070d;
+  --bg-soft: #0b0f1a;
+  --panel: rgba(11, 15, 26, 0.86);
+  --line: rgba(140, 170, 255, 0.16);
+  --line-strong: rgba(150, 180, 255, 0.34);
+  --ink: #e8eefc;
+  --ink-dim: #8b9ac0;
+  --ink-faint: #5a678a;
+
+  --lane0: #ff6b8a;
+  --lane1: #6bcBff;
+  --lane2: #a78bfa;
+  --lane3: #ffd166;
+
+  --perfect: #ffe9a8;
+  --great: #8ef2c4;
+  --good: #7fc4ff;
+  --bad: #ff8fa3;
+  --miss: #7d879e;
+
+  --accent: #6bcBff;
+  --font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* notch / home-indicator insets, read from JS for the canvas HUD */
+  --sai-top: env(safe-area-inset-top, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
+  --sai-bottom: env(safe-area-inset-bottom, 0px);
+  --sai-left: env(safe-area-inset-left, 0px);
+}
+
+* { box-sizing: border-box; }
+
+html {
+  /* no pull-to-refresh, no rubber-banding behind the playfield */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  /* long-presses and double-taps must never select, zoom or pop a callout */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+body { cursor: default; }
+
+/* the canvas owns every touch that lands on it */
+.view { touch-action: none; }
+
+/* -------------------------------------------------------------------- */
+/* background stage                                                       */
+/* -------------------------------------------------------------------- */
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 20% 10%, #131c33 0%, #070a13 55%, #04060b 100%);
+}
+
+.bga {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .8s ease;
+  filter: saturate(1.05) contrast(1.04);
+  will-change: opacity;
+}
+
+.bga.ready { opacity: .78; }
+
+.bga-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4, 6, 11, .92) 0%, rgba(4, 6, 11, .58) 42%, rgba(4, 6, 11, .30) 68%, rgba(4, 6, 11, .62) 100%),
+    radial-gradient(140% 110% at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .55) 100%);
+}
+
+.view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* --------------------------------------------------------------------- */
+/* in-game icon button (pause)                                           */
+/* --------------------------------------------------------------------- */
+
+/* A real <button> rather than a canvas hotspot: it gets a native hit target,
+   keyboard focus and an accessible name for free, and — because it is a
+   sibling of the canvas rather than inside it — a tap here can never also
+   register as a lane press.  Only shown while a hand-held run is playing. */
+.icon-btn {
+  position: absolute;
+  z-index: 6;
+  top: max(10px, var(--sai-top));
+  left: max(10px, var(--sai-left));
+  width: 46px;
+  height: 46px;
+  display: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: rgba(8, 12, 22, .55);
+  color: var(--ink);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+
+.icon-btn svg { width: 20px; height: 20px; fill: currentColor; display: block; }
+
+.icon-btn:hover { border-color: var(--accent); }
+.icon-btn:active { background: rgba(107, 203, 255, .30); transform: scale(.94); }
+
+/* visible only during a hand-held run — the menus have their own buttons, and
+   the pause panel already offers "继续" */
+body[data-mode="play"][data-layout="handheld"] .icon-btn { display: grid; }
+
+/* AUTO indicator / kill switch.
+
+   AUTO is a practice aid rather than a setting (it is deliberately absent from
+   the settings screen), and it is not persisted — but while it *is* on, the
+   player has to be able to see that and get out of it.  A chip at the top of
+   the screen does both: it only exists in that state, and one click/tap ends
+   it.  Without this the only exit was an F2 press nobody could discover, which
+   on a phone does not exist at all. */
+.auto-chip {
+  position: absolute;
+  z-index: 6;
+  top: max(10px, var(--sai-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: .55em;
+  height: 34px;
+  padding: 0 .9em;
+  border: 1px solid rgba(255, 209, 102, .5);
+  border-radius: 999px;
+  background: rgba(38, 28, 8, .74);
+  color: #ffd166;
+  font: inherit;
+  font-size: clamp(11px, 1.3vmin, 22px);
+  font-weight: 700;
+  letter-spacing: .06em;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+
+.auto-chip .auto-tag { font-weight: 800; letter-spacing: .16em; }
+.auto-chip .auto-hint { color: rgba(255, 209, 102, .66); font-weight: 500; }
+.auto-chip .auto-hint::before { content: "· "; }
+
+.auto-chip:hover { background: rgba(66, 48, 10, .88); border-color: #ffd166; }
+.auto-chip:active { transform: translateX(-50%) scale(.95); }
+
+body[data-auto="1"][data-mode="play"] .auto-chip { display: inline-flex; }
+
+/* --------------------------------------------------------------------- */
+/* concert-pyro colour grade                                             */
+/* --------------------------------------------------------------------- */
+
+/* The cold->warm shift is applied here (over the BGA) and to the <video> via a
+   CSS filter set from JS, so the whole picture is graded -- not just whatever
+   the canvas happens to paint.  Opacity is driven per frame, so no transition. */
+.grade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(130% 85% at 50% 116%,
+      rgba(255, 156, 62, .60) 0%,
+      rgba(255, 112, 32, .26) 36%,
+      rgba(255, 80, 0, 0) 72%),
+    linear-gradient(0deg,
+      rgba(255, 138, 52, .20) 0%,
+      rgba(120, 40, 0, 0) 62%),
+    linear-gradient(180deg,
+      rgba(255, 186, 108, .10) 0%,
+      rgba(180, 70, 10, .04) 100%);
+}
+
+.view { touch-action: none; }
+
+/* -------------------------------------------------------------------- */
+/* screens                                                                */
+/* -------------------------------------------------------------------- */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 3vmin, 64px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .28s ease, visibility .28s;
+  overflow: auto;
+}
+
+.screen.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Panels are sized in vmin as well as px so that a 3840x2160 target gets a
+   full-sized interface rather than a 840px card floating in the middle. */
+.panel {
+  width: clamp(680px, 54vmin, 1450px);
+  max-width: 94vw;
+  padding: clamp(26px, 4.2vmin, 88px);
+  border: 1px solid var(--line);
+  border-radius: clamp(18px, 1.6vmin, 34px);
+  background: var(--panel);
+  backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, .6),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.panel.wide { width: clamp(760px, 76vmin, 2200px); }
+.select-panel { width: clamp(700px, 60vmin, 1650px); }
+.title-panel { width: clamp(700px, 62vmin, 1700px); }
+/* six rows do not need a 2200px panel */
+.settings-panel { width: clamp(620px, 52vmin, 1400px); }
+
+/* -------------------------------------------------------------------- */
+/* developer mode                                                        */
+/* -------------------------------------------------------------------- */
+
+/* The developer entries are simply not in the layout unless the mode is on:
+   `hidden` is set from JS as well, so Tab and "tap the button that is not
+   there" both come up empty. */
+body:not([data-dev="1"]) .dev-only { display: none; }
+
+.dev-panel { width: clamp(760px, 84vmin, 2400px); }
+
+/* the unlock prompt: deliberately small, one field, one button */
+.lock-panel { width: clamp(520px, 44vmin, 1100px); text-align: left; }
+
+.lock-form { display: flex; gap: 10px; align-items: stretch; }
+
+.lock-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: .7em 1em;
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(8px, .9vmin, 20px);
+  background: rgba(0, 0, 0, .35);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.7vmin, 32px);
+  letter-spacing: .3em;
+}
+
+.lock-input::placeholder { color: var(--ink-faint); letter-spacing: .2em; }
+.lock-input:focus { outline: none; border-color: #ffb020; box-shadow: 0 0 0 3px rgba(255, 176, 32, .16); }
+
+.lock-panel.shake { animation: lockShake .38s cubic-bezier(.36, .07, .19, .97); }
+
+@keyframes lockShake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
+.lock-error {
+  margin: .8em 0 0;
+  min-height: 1.4em;
+  font-size: clamp(11px, 1.35vmin, 24px);
+  color: var(--bad);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lock-panel.shake { animation: none; }
+}
+
+/* the screen has to read as "not the game" at a glance: amber, and a border
+   that is deliberately louder than a normal panel */
+.dev-eyebrow { color: #ffb020; }
+
+.dev-title {
+  margin: 0 0 .35em;
+  background: linear-gradient(180deg, #ffe9b8 0%, #ffc76b 62%, #e08c14 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dev-note {
+  margin: 0 0 1.3em;
+  max-width: 62ch;
+  font-size: clamp(11px, 1.4vmin, 26px);
+  line-height: 1.7;
+  color: var(--ink-dim);
+}
+
+.dev-note kbd { margin: 0 .15em; }
+
+#dev .panel {
+  border-color: rgba(255, 176, 32, .35);
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, .6),
+    inset 0 1px 0 rgba(255, 209, 102, .08);
+}
+
+/* group headings inside the dev grid */
+.setting-group {
+  grid-column: 1 / -1;
+  margin: .6em 0 -.2em;
+  font-size: clamp(10px, 1.15vmin, 20px);
+  font-weight: 700;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: #ffb020;
+}
+
+.setting-group:first-child { margin-top: 0; }
+
+/* six rows fit the player screen; the developer screen is allowed to be a long
+   list.  Its rows stack — label above control — which halves the width a row
+   needs, and that is what lets fourteen rows pack into columns and fit on one
+   screen instead of becoming a scroll.  `#dev` is in the selector because
+   `.settings-grid` is defined later in this file with the same specificity. */
+#dev .dev-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 2px 32px;
+}
+
+#dev .dev-grid .setting {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+#dev .dev-grid .setting-control { flex-wrap: wrap; }
+
+/* Fourteen controls do not fit every viewport, so the *list* scrolls inside the
+   card while the title and the buttons stay put.  That keeps the screen itself
+   non-scrolling — the same guarantee the result screen makes — and means the
+   way out is always on screen.
+
+   `grid-template-rows` is what makes `max-height: 100%` meaningful: with the
+   default auto row, "100%" would resolve against a content-sized grid area and
+   collapse to `none`.  One row of exactly the screen's height gives the card
+   something real to cap itself at. */
+#dev { grid-template-rows: minmax(0, 1fr); }
+
+#dev .panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+
+#dev .dev-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+
+
+.eyebrow {
+  margin: 0 0 .7em;
+  font-size: clamp(11px, 1.35vmin, 28px);
+  letter-spacing: .32em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.display {
+  margin: 0;
+  font-size: clamp(48px, 10.5vmin, 230px);
+  line-height: .95;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  background: linear-gradient(180deg, #ffffff 0%, #b9cdf6 68%, #7f95c4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.display.sm { font-size: clamp(30px, 5.4vmin, 110px); }
+
+.subtitle {
+  margin: .5em 0 1.6em;
+  color: var(--ink-dim);
+  font-size: clamp(12px, 1.75vmin, 32px);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+/* -------------------------------------------------------------------- */
+/* menus                                                                  */
+/* -------------------------------------------------------------------- */
+.menu {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 1.4em;
+}
+
+.menu-item {
+  display: grid;
+  grid-template-columns: clamp(34px, 3.2vmin, 72px) 1fr auto;
+  align-items: center;
+  gap: clamp(10px, 1.2vmin, 26px);
+  padding: clamp(12px, 1.9vmin, 40px) clamp(14px, 2.2vmin, 46px);
+  border: 1px solid var(--line);
+  border-radius: clamp(10px, 1vmin, 22px);
+  background: rgba(255, 255, 255, .022);
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(14px, 1.9vmin, 36px);
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s, border-color .16s, transform .16s;
+}
+
+.menu-item:hover, .menu-item:focus-visible {
+  background: rgba(107, 203, 255, .11);
+  border-color: var(--line-strong);
+  transform: translateX(4px);
+  outline: none;
+}
+
+.mi-key {
+  display: grid;
+  place-items: center;
+  width: clamp(26px, 2.4vmin, 56px);
+  height: clamp(26px, 2.4vmin, 56px);
+  border-radius: clamp(6px, .6vmin, 14px);
+  border: 1px solid var(--line-strong);
+  background: rgba(107, 203, 255, .1);
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.15vmin, 24px);
+  color: var(--accent);
+}
+
+.mi-label { font-weight: 600; }
+
+.mi-hint {
+  font-family: var(--mono);
+  font-size: clamp(10px, .95vmin, 20px);
+  letter-spacing: .2em;
+  color: var(--ink-faint);
+}
+
+.footnote {
+  margin: .5em 0 0;
+  font-size: clamp(11px, 1.35vmin, 27px);
+  color: var(--ink-dim);
+  line-height: 2;
+}
+
+.footnote.dim { color: var(--ink-faint); font-family: var(--mono); font-size: clamp(10px, .95vmin, 19px); }
+
+kbd {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: .18em .45em;
+  margin: 0 .14em;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: clamp(4px, .45vmin, 9px);
+  background: rgba(255, 255, 255, .05);
+  font-family: var(--mono);
+  font-size: .9em;
+  text-align: center;
+  color: var(--ink);
+}
+
+/* -------------------------------------------------------------------- */
+/* buttons                                                                */
+/* -------------------------------------------------------------------- */
+.btn {
+  padding: .72em 1.5em;
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(8px, .9vmin, 20px);
+  background: rgba(255, 255, 255, .04);
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(13px, 1.55vmin, 30px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .16s, border-color .16s, transform .12s;
+}
+
+.btn:hover, .btn:focus-visible {
+  background: rgba(107, 203, 255, .14);
+  border-color: var(--accent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.btn.primary {
+  background: linear-gradient(180deg, rgba(107, 203, 255, .30), rgba(107, 203, 255, .14));
+  border-color: rgba(107, 203, 255, .7);
+  color: #eaf6ff;
+  box-shadow: 0 8px 30px rgba(107, 203, 255, .18);
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 1.6em;
+}
+
+.panel-actions.col { flex-direction: column; }
+.panel-actions.col .btn { width: 100%; }
+
+/* -------------------------------------------------------------------- */
+/* difficulty cards                                                       */
+/* -------------------------------------------------------------------- */
+.diffs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 40vw), 1fr));
+  gap: 12px;
+}
+
+.tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.2em;
+}
+
+.tracks .btn { padding: .5em 1.1em; font-size: 13px; }
+
+.diff {
+  position: relative;
+  padding: clamp(15px, 2.3vmin, 48px);
+  border: 1px solid var(--line);
+  border-radius: clamp(12px, 1.2vmin, 26px);
+  background: rgba(255, 255, 255, .022);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s, border-color .16s, transform .16s;
+}
+
+.diff:hover, .diff:focus-visible { border-color: var(--line-strong); outline: none; transform: translateY(-2px); }
+
+.diff[aria-selected="true"] {
+  background: rgba(107, 203, 255, .13);
+  border-color: var(--accent);
+  box-shadow: 0 10px 40px rgba(107, 203, 255, .16);
+}
+
+.diff-name {
+  font-size: clamp(15px, 2vmin, 40px);
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.diff-lv {
+  font-family: var(--mono);
+  font-size: clamp(26px, 5vmin, 100px);
+  font-weight: 700;
+  line-height: 1.1;
+  margin: .1em 0 .3em;
+}
+
+.diff[data-d="easy"] .diff-lv { color: #8ef2c4; }
+.diff[data-d="normal"] .diff-lv { color: #6bcBff; }
+.diff[data-d="hard"] .diff-lv { color: #ffd166; }
+.diff[data-d="expert"] .diff-lv { color: #ff6b8a; }
+
+.diff-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .06em; }
+
+/* -------------------------------------------------------------------- */
+/* settings                                                               */
+/* -------------------------------------------------------------------- */
+/* The track minimum must exceed label + control, otherwise the `auto` control
+   column wins every pixel and the label collapses and wraps one glyph per line.
+   A range row needs roughly 200 (slider) + 90 (value) + 16 (gap) + 200 (label). */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr));
+  gap: 4px 40px;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: clamp(.6em, 1.1vmin, 1em) 0;
+  border-bottom: 1px solid rgba(140, 170, 255, .08);
+}
+
+.setting-label {
+  font-size: clamp(13px, 1.6vmin, 30px);
+  min-width: 0;   /* let the label shrink instead of forcing the column wide */
+}
+
+/* the primary line never wraps; it ellipsises in the worst case */
+.setting-label .sl {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setting-label small { display: block; color: var(--ink-faint); font-size: .78em; margin-top: .25em; }
+
+.setting-control { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+
+.setting input[type="range"] {
+  width: clamp(90px, 10vmin, 200px);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.setting .val {
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.2vmin, 24px);
+  color: var(--accent);
+  min-width: 3.4em;
+  text-align: right;
+}
+
+.switch {
+  position: relative;
+  width: clamp(44px, 3.6vmin, 84px);
+  height: clamp(24px, 2vmin, 46px);
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, .05);
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: calc(100% * 0.42);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  transition: transform .18s, background .18s;
+}
+
+.switch[aria-checked="true"] { background: rgba(107, 203, 255, .28); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(105%); background: #fff; }
+
+select.sel {
+  padding: .45em .7em;
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(6px, .8vmin, 16px);
+  background: rgba(10, 14, 24, .9);
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(12px, 1.3vmin, 24px);
+  cursor: pointer;
+}
+
+/* -------------------------------------------------------------------- */
+/* key binder                                                            */
+/* -------------------------------------------------------------------- */
+
+/* the binder needs the full panel width, not one column */
+.setting.setting-wide {
+  grid-template-columns: 1fr;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding-bottom: 1.2em;
+  border-bottom: 1px solid var(--line);
+}
+
+.keybinder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: clamp(8px, 1vmin, 16px);
+}
+
+.keyslots { display: flex; gap: clamp(6px, .8vmin, 12px); }
+
+.keyslot {
+  min-width: clamp(46px, 5.2vmin, 96px);
+  min-height: clamp(40px, 4.4vmin, 82px);
+  padding: .3em .6em;
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(7px, .8vmin, 16px);
+  background: rgba(255, 255, 255, .05);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.7vmin, 32px);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+}
+
+.keyslot:hover { background: rgba(107, 203, 255, .14); border-color: var(--accent); }
+
+.keyslot[data-lane="0"] { border-bottom-color: var(--lane0); }
+.keyslot[data-lane="1"] { border-bottom-color: var(--lane1); }
+.keyslot[data-lane="2"] { border-bottom-color: var(--lane2); }
+.keyslot[data-lane="3"] { border-bottom-color: var(--lane3); }
+.keyslot[data-lane="0"], .keyslot[data-lane="1"],
+.keyslot[data-lane="2"], .keyslot[data-lane="3"] { border-bottom-width: 3px; }
+
+.keyslot.armed {
+  background: rgba(255, 209, 102, .18);
+  border-color: var(--lane3);
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, .18);
+  animation: keyslot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes keyslot-pulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.keypreset { min-height: clamp(40px, 4.4vmin, 82px); }
+
+.keystatus {
+  flex: 1 1 auto;
+  min-width: 8em;
+  font-size: clamp(11px, 1.25vmin, 22px);
+  color: var(--ink-dim);
+}
+
+.keystatus.live { color: var(--lane3); }
+
+#title-keys kbd, #help-keys kbd { margin: 0 .1em; }
+
+/* -------------------------------------------------------------------- */
+/* help                                                                   */
+/* -------------------------------------------------------------------- */
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: clamp(20px, 3vmin, 64px);
+}
+
+.help-grid h3 {
+  margin: 0 0 .7em;
+  font-size: clamp(12px, 1.4vmin, 26px);
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ruled { list-style: none; margin: 0; padding: 0; }
+
+.ruled li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: clamp(.4em, .8vmin, .7em) 0;
+  border-bottom: 1px solid rgba(140, 170, 255, .08);
+  font-size: clamp(12px, 1.45vmin, 27px);
+}
+
+.ruled li b { font-weight: 700; }
+.ruled li span { color: var(--ink-dim); font-family: var(--mono); font-size: .9em; }
+
+b[data-j="perfect"] { color: var(--perfect); }
+b[data-j="great"] { color: var(--great); }
+b[data-j="good"] { color: var(--good); }
+b[data-j="bad"] { color: var(--bad); }
+b[data-j="miss"] { color: var(--miss); }
+
+/* -------------------------------------------------------------------- */
+/* results                                                                */
+/* -------------------------------------------------------------------- */
+.result-head {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: clamp(18px, 3vmin, 48px);
+  align-items: center;
+  margin-bottom: 1.6em;
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  width: clamp(84px, 15vmin, 300px);
+  aspect-ratio: 1;
+  border-radius: clamp(16px, 1.8vmin, 40px);
+  border: 2px solid var(--line-strong);
+  font-size: clamp(42px, 9vmin, 190px);
+  font-weight: 800;
+  line-height: 1;
+  background: rgba(255, 255, 255, .03);
+  letter-spacing: -.04em;
+}
+
+.rank[data-r="AAA"] { color: #ffe9a8; border-color: #ffe9a8; box-shadow: 0 0 60px rgba(255, 233, 168, .22); }
+.rank[data-r="AA"]  { color: #8ef2c4; border-color: #8ef2c4; box-shadow: 0 0 48px rgba(142, 242, 196, .18); }
+.rank[data-r="A"]   { color: #6bcBff; border-color: #6bcBff; }
+.rank[data-r="B"]   { color: #a78bfa; border-color: #a78bfa; }
+.rank[data-r="C"]   { color: #ffd166; border-color: #ffd166; }
+.rank[data-r="D"]   { color: #ff8fa3; border-color: #ff8fa3; }
+.rank[data-r="F"]   { color: var(--miss); border-color: var(--miss); }
+
+.label {
+  margin: 0;
+  font-size: clamp(10px, 1.15vmin, 22px);
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.value {
+  margin: .1em 0 .5em;
+  font-family: var(--mono);
+  font-size: clamp(22px, 4vmin, 84px);
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 40vw), 1fr));
+  gap: clamp(8px, 1.2vmin, 26px);
+}
+
+.rcell {
+  padding: clamp(12px, 1.6vmin, 34px) clamp(14px, 1.8vmin, 38px);
+  border: 1px solid var(--line);
+  border-radius: clamp(8px, .9vmin, 20px);
+  background: rgba(255, 255, 255, .022);
+}
+
+.rcell .label { margin-bottom: .45em; }
+.rcell .num { font-family: var(--mono); font-size: clamp(17px, 2.6vmin, 54px); font-weight: 700; }
+
+/* -------------------------------------------------------------------- */
+/* hand-held results: one page, never a scroll                           */
+/* -------------------------------------------------------------------- */
+
+/* The summary is the one screen where a scrollbar genuinely costs the player
+   something: the rank, the score, the eight counters and the tip button all
+   have to be visible at once, or the important ones are simply missed.  On a
+   landscape phone the stock layout measured 724 px tall inside a 393 px
+   viewport — a 355 px scroll.
+
+   So on the compact layout nothing is sized against the content any more:
+   rank + score + accuracy collapse into a single row, the eight counters get
+   fixed narrow columns instead of 150 px "cards", and the action rows stop
+   wrapping.  Everything is deliberately keyed on `data-layout="handheld"`
+   rather than on `(pointer: coarse)`: it is the layout, not the pointing
+   device, that decides whether the HUD-bar world applies (a narrow desktop
+   window is hand-held too). */
+body[data-layout="handheld"] #result {
+  padding: max(8px, var(--sai-top)) max(8px, var(--sai-right))
+           max(8px, var(--sai-bottom)) max(8px, var(--sai-left));
+}
+
+body[data-layout="handheld"] #result .panel {
+  width: 100%;
+  max-width: 100%;
+  padding: clamp(10px, 2.8vmin, 26px) clamp(12px, 3.2vmin, 30px);
+  border-radius: clamp(12px, 2.4vmin, 22px);
+}
+
+body[data-layout="handheld"] #result .eyebrow {
+  margin-bottom: .35em;
+  font-size: clamp(9px, 2.4vmin, 13px);
+  letter-spacing: .22em;
+}
+
+/* one row: rank, score, accuracy — instead of three stacked blocks */
+body[data-layout="handheld"] #result .result-head {
+  grid-template-columns: auto 1fr 1fr;
+  gap: clamp(10px, 2.6vmin, 20px);
+  align-items: center;
+  text-align: left;
+  margin-bottom: .7em;
+}
+
+body[data-layout="handheld"] #result .rank {
+  width: clamp(48px, 12vmin, 96px);
+  margin: 0;
+  border-radius: clamp(10px, 2vmin, 18px);
+  border-width: 2px;
+  font-size: clamp(26px, 7vmin, 56px);
+}
+
+body[data-layout="handheld"] #result .label {
+  font-size: clamp(8px, 2.4vmin, 13px);
+  letter-spacing: .12em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body[data-layout="handheld"] #result .value {
+  margin: .08em 0 .18em;
+  font-size: clamp(19px, 5.4vmin, 42px);
+}
+
+/* Four columns in portrait, eight in landscape — the counters are readouts, not
+   cards, so they get the width their text actually needs.  The counts are
+   explicit rather than `auto-fit`: auto-fit would pick five columns on a 393 px
+   phone (leaving a ragged 5/3 grid) and six on a small landscape one, which is
+   exactly where the height budget is tightest. */
+body[data-layout="handheld"] #result .result-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(5px, 1.1vmin, 10px);
+}
+
+@media (orientation: landscape) {
+  body[data-layout="handheld"] #result .result-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+body[data-layout="handheld"] #result .rcell {
+  padding: clamp(5px, 1.3vmin, 10px) clamp(5px, 1.5vmin, 12px);
+  border-radius: clamp(6px, 1.2vmin, 12px);
+}
+
+body[data-layout="handheld"] #result .rcell .label { margin-bottom: .2em; }
+body[data-layout="handheld"] #result .rcell .num { font-size: clamp(14px, 3.8vmin, 26px); }
+
+/* actions keep one line: 「标题 / 选难度 / 再来一次」 all three fit, and the tip
+   button stays a single full-width row under them */
+body[data-layout="handheld"] #result .panel-actions {
+  flex-wrap: nowrap;
+  gap: clamp(5px, 1.4vmin, 10px);
+  margin-top: .7em;
+}
+
+body[data-layout="handheld"] #result .panel-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: .45em .5em;
+  font-size: clamp(11px, 3.1vmin, 17px);
+  white-space: nowrap;
+}
+
+body[data-layout="handheld"] #result .panel-actions kbd { display: none; }
+body[data-layout="handheld"] #result .sponsor-row { margin-top: clamp(6px, 1.5vmin, 12px); }
+body[data-layout="handheld"] #result .sponsor-row .btn { min-height: 40px; }
+
+/* A short landscape screen has ~340 px of usable height, so the head is folded
+   further: the rank shrinks and the whole panel keeps a small gap scale. */
+@media (orientation: landscape) and (max-height: 560px) {
+  body[data-layout="handheld"] #result .rank { width: clamp(44px, 11vmin, 78px); }
+  body[data-layout="handheld"] #result .value { margin-bottom: .1em; }
+  body[data-layout="handheld"] #result .result-head { margin-bottom: .5em; }
+}
+
+/* ...and a 320 px-tall one (iPhone SE landscape) leaves almost nothing, so the
+   controls give up a few pixels of thumb room to stay on one page. */
+@media (orientation: landscape) and (max-height: 380px) {
+  body[data-layout="handheld"] #result { padding: 6px; }
+  body[data-layout="handheld"] #result .panel { padding: 8px 10px; }
+  body[data-layout="handheld"] #result .eyebrow { margin-bottom: .2em; }
+  body[data-layout="handheld"] #result .rank { width: clamp(38px, 12vmin, 56px); font-size: 24px; }
+  body[data-layout="handheld"] #result .result-head { margin-bottom: .35em; }
+  body[data-layout="handheld"] #result .result-grid { gap: 3px; }
+  body[data-layout="handheld"] #result .rcell { padding: 4px 4px; }
+  /* the counters are down to ~64 px here, and 「理论值 100%」 is the longest
+     label there is — drop the tracking rather than let it ellipsise */
+  body[data-layout="handheld"] #result .rcell .label { font-size: 8px; letter-spacing: 0; }
+  body[data-layout="handheld"] #result .panel-actions { margin-top: .45em; }
+  body[data-layout="handheld"] #result .panel-actions .btn { min-height: 34px; padding: .3em .4em; }
+  body[data-layout="handheld"] #result .sponsor-row { margin-top: 5px; }
+  body[data-layout="handheld"] #result .sponsor-row .btn { min-height: 34px; }
+}
+
+/* -------------------------------------------------------------------- */
+/* 赞赏                                                                   */
+/* -------------------------------------------------------------------- */
+
+/* One extra row under the result actions.  It must be visible at a glance
+   without competing with 「再来一次」, so it gets amber gold — deliberately the
+   one warm thing on a cold screen — plus a slow sheen to say "这里能点". */
+.sponsor-row { margin-top: 14px; }
+.sponsor-row .btn { flex: 1 1 100%; }
+
+.btn.sponsor {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 190, 80, .55);
+  background: linear-gradient(135deg, rgba(255, 217, 122, .22), rgba(255, 176, 32, .16) 55%, rgba(247, 143, 0, .20));
+  color: #ffd9a0;
+  font-weight: 800;
+  letter-spacing: .02em;
+  box-shadow: 0 8px 26px rgba(244, 150, 0, .16), inset 0 1px 0 rgba(255, 255, 255, .08);
+  animation: sponsorPulse 2.8s ease-in-out infinite;
+}
+
+.btn.sponsor:hover,
+.btn.sponsor:focus-visible {
+  background: linear-gradient(135deg, rgba(255, 217, 122, .34), rgba(255, 176, 32, .26) 55%, rgba(247, 143, 0, .30));
+  border-color: rgba(255, 205, 120, .85);
+  box-shadow: 0 12px 34px rgba(244, 150, 0, .26), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+/* the sheen is a pseudo-element, so it is invisible to hit-testing */
+.btn.sponsor::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 34%;
+  background: linear-gradient(100deg, transparent, rgba(255, 240, 200, .42), transparent);
+  transform: translateX(-160%) skewX(-20deg);
+  animation: sponsorSheen 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes sponsorPulse {
+  0%, 100% { filter: brightness(1) saturate(1); }
+  50%      { filter: brightness(1.12) saturate(1.14); }
+}
+
+@keyframes sponsorSheen {
+  0%, 52%   { transform: translateX(-160%) skewX(-20deg); }
+  84%, 100% { transform: translateX(360%) skewX(-20deg); }
+}
+
+/* ---- the modal ------------------------------------------------------- */
+
+.sponsor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: clamp(14px, 2.4vmin, 40px);
+  background: rgba(3, 5, 11, .68);
+  backdrop-filter: blur(8px) saturate(1.1);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .22s ease, visibility .22s;
+}
+
+.sponsor-modal.is-open { opacity: 1; visibility: visible; }
+
+.sponsor-card {
+  display: flex;
+  flex-direction: column;
+  width: clamp(320px, 30vmin, 660px);
+  max-width: 92vw;
+  max-height: calc(100vh - 2 * clamp(14px, 2.4vmin, 40px));
+  padding: clamp(16px, 1.9vmin, 40px);
+  border: 1px solid rgba(255, 190, 80, .28);
+  border-radius: clamp(14px, 1.4vmin, 30px);
+  background: var(--panel);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .66), inset 0 1px 0 rgba(255, 255, 255, .06);
+  transform: translateY(10px) scale(.97);
+  transition: transform .26s cubic-bezier(.2, .9, .3, 1.3);
+}
+
+.sponsor-modal.is-open .sponsor-card { transform: none; }
+
+.sponsor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: .7em;
+}
+
+.sponsor-head h2 {
+  margin: 0;
+  font-size: clamp(16px, 2.2vmin, 42px);
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: #ffd9a0;
+}
+
+.sponsor-x {
+  flex: 0 0 auto;
+  width: clamp(32px, 3.4vmin, 54px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .05);
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: clamp(13px, 1.5vmin, 26px);
+  cursor: pointer;
+  transition: background .16s, color .16s, border-color .16s;
+}
+
+.sponsor-x:hover { background: rgba(255, 107, 138, .18); color: var(--ink); border-color: var(--line-strong); }
+
+.sponsor-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+}
+
+.sponsor-note {
+  margin: 0 0 .9em;
+  font-size: clamp(12px, 1.5vmin, 28px);
+  line-height: 1.75;
+  color: var(--ink-dim);
+  /* a narrow card otherwise strands the last two characters on their own line */
+  text-wrap: balance;
+}
+
+.sponsor-qr {
+  display: block;
+  width: min(clamp(180px, 22vmin, 380px), 62vw);
+  height: auto;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: clamp(10px, 1vmin, 22px);
+  background: #fff;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+}
+
+.sponsor-hint {
+  margin: .9em 0 0;
+  font-size: clamp(11px, 1.25vmin, 24px);
+  letter-spacing: .12em;
+  color: var(--ink-faint);
+}
+
+.sponsor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 1.1em;
+}
+
+.sponsor-thanks { font-size: clamp(10px, 1.2vmin, 22px); color: var(--ink-faint); }
+.sponsor-foot .btn { flex: 0 0 auto; }
+
+/* You cannot scan a QR with the same phone that is showing it — say so. */
+.sponsor-mobile-only { display: none; }
+
+/* 关掉动画偏好就不要闪 */
+@media (prefers-reduced-motion: reduce) {
+  .btn.sponsor, .btn.sponsor::after { animation: none; }
+  .btn.sponsor::after { display: none; }
+}
+
+/* -------------------------------------------------------------------- */
+/* boot + toast                                                           */
+/* -------------------------------------------------------------------- */
+.boot-inner { text-align: center; width: clamp(560px, 56vmin, 1450px); max-width: 94vw; }
+
+.boot-tag {
+  margin: 0 0 .3em;
+  font-size: clamp(11px, 1.25vmin, 26px);
+  letter-spacing: .4em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.boot-title {
+  margin: 0 0 .5em;
+  font-size: clamp(38px, 8vmin, 180px);
+  font-weight: 800;
+  letter-spacing: -.03em;
+  background: linear-gradient(180deg, #ffffff 0%, #b9cdf6 68%, #7f95c4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.boot-bar {
+  height: clamp(3px, .35vmin, 8px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+
+.boot-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6bcBff, #a78bfa);
+  transition: width .25s ease;
+}
+
+.boot-note {
+  margin: .9em 0 0;
+  font-family: var(--mono);
+  font-size: clamp(11px, 1.15vmin, 24px);
+  color: var(--ink-dim);
+  min-height: 1.4em;
+}
+
+/* shown only when the ES module entry point could not be loaded */
+.boot-help {
+  margin-top: clamp(14px, 1.8vmin, 34px);
+  padding: clamp(14px, 1.8vmin, 34px);
+  border: 1px solid rgba(255, 107, 138, .42);
+  border-radius: clamp(10px, 1vmin, 22px);
+  background: rgba(255, 107, 138, .07);
+  text-align: left;
+}
+
+.bh-body {
+  margin: 0 0 .9em;
+  font-size: clamp(12px, 1.25vmin, 25px);
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+.bh-body.dim { color: var(--ink-dim); margin: .9em 0 0; font-size: clamp(11px, 1.1vmin, 22px); }
+.bh-body code, .bh-cmd code { font-family: var(--mono); }
+
+.bh-body code {
+  padding: .1em .4em;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .09);
+  color: #ffd166;
+}
+
+.bh-cmd {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: clamp(8px, 1vmin, 18px);
+  width: 100%;
+  margin-bottom: 8px;
+  padding: clamp(9px, 1.15vmin, 22px) clamp(11px, 1.4vmin, 26px);
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(7px, .8vmin, 16px);
+  background: rgba(255, 255, 255, .05);
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(12px, 1.25vmin, 25px);
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s, border-color .16s;
+}
+
+.bh-cmd:hover { background: rgba(107, 203, 255, .14); border-color: var(--accent); }
+
+.bh-os {
+  font-family: var(--mono);
+  font-size: clamp(10px, 1vmin, 19px);
+  letter-spacing: .1em;
+  color: var(--ink-faint);
+  min-width: 4.4em;
+}
+
+.bh-cp { font-size: clamp(10px, 1vmin, 19px); color: var(--accent); white-space: nowrap; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 5vh;
+  transform: translate(-50%, 16px);
+  z-index: 40;
+  padding: .8em 1.5em;
+  border: 1px solid var(--line-strong);
+  border-radius: clamp(8px, .9vmin, 20px);
+  background: rgba(8, 12, 22, .94);
+  color: var(--ink);
+  font-size: clamp(12px, 1.4vmin, 28px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  backdrop-filter: blur(14px);
+  max-width: 80vw;
+}
+
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* -------------------------------------------------------------------- */
+/* hand-held tuning                                                       */
+/* -------------------------------------------------------------------- */
+
+/* Anything with a coarse pointer gets thumb-sized controls, regardless of the
+   reported viewport width — a tablet is not a phone but is still a finger. */
+@media (pointer: coarse) {
+  .screen { padding: max(12px, var(--sai-top)) max(12px, var(--sai-right)) max(12px, var(--sai-bottom)) max(12px, var(--sai-left)); }
+
+  .panel, .panel.wide, .title-panel, .select-panel {
+    width: 100%;
+    max-width: 100%;
+    border-radius: clamp(14px, 2.5vmin, 28px);
+    padding: clamp(16px, 3.4vmin, 46px) clamp(14px, 3vmin, 40px);
+  }
+
+  /* every interactive row gets a comfortable 44px+ target */
+  .menu-item { min-height: 56px; padding: 14px 16px; font-size: clamp(14px, 4.1vmin, 26px); }
+  .btn { min-height: 48px; padding: .8em 1.4em; font-size: clamp(13px, 3.6vmin, 24px); }
+  .diff { min-height: 84px; }
+  .diff-lv { font-size: clamp(24px, 8vmin, 64px); }
+
+  .setting { padding: .55em 0; }
+  .setting-label { font-size: clamp(13px, 3.4vmin, 24px); }
+  .setting input[type="range"] { height: 32px; }
+  .setting .val { min-width: 4.2em; font-size: clamp(11px, 3vmin, 22px); }
+  select.sel { min-height: 44px; font-size: clamp(12px, 3.4vmin, 22px); }
+  .switch { width: 58px; height: 32px; }
+  .switch::after { top: 4px; left: 4px; }
+
+  .panel-actions { gap: 10px; }
+  .panel-actions .btn { flex: 1 1 46%; }
+
+  .result-head { grid-template-columns: 1fr; text-align: center; gap: 18px; }
+  .rank { margin: 0 auto; }
+
+  /* the tip card must fit a phone without scrolling the QR out of view */
+  .sponsor-card { width: 100%; max-height: calc(100vh - 24px); }
+  .sponsor-qr { width: min(58vw, 62vmin); }
+  .sponsor-x { width: 44px; }
+  .sponsor-mobile-only { display: block; }
+
+  /* thumb-sized, and it must not sit under the notch */
+  .auto-chip { height: 40px; padding: 0 1em; }
+}
+
+/* portrait phones: one control per row, settings become a single column */
+@media (max-width: 820px) and (pointer: coarse) {
+  .settings-grid { grid-template-columns: 1fr; gap: 0; }
+  .menu-item { grid-template-columns: 38px 1fr; }
+  .mi-hint { display: none; }
+  .diffs { grid-template-columns: 1fr 1fr; }
+  .help-grid { grid-template-columns: 1fr; gap: 18px; }
+  .ruled li { font-size: clamp(12px, 3.4vmin, 20px); }
+}
+
+/* short landscape: the title panel must not overflow vertically */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  .screen { align-items: start; }
+  .display { font-size: clamp(30px, 7.5vmin, 72px); }
+  .subtitle { margin-bottom: 1em; }
+  .menu { gap: 6px; margin-bottom: 1em; }
+  .menu-item { min-height: 46px; padding: 9px 14px; }
+  .boot-help { margin-top: 10px; }
+  .bh-body { font-size: clamp(11px, 2.6vmin, 17px); }
+
+  /* the tip card has a whole QR plus three lines of text to fit in ~390px of
+     height; squeezing the code to a fixed fraction of the height keeps the
+     whole thing on screen instead of hiding the footnote behind a scroll */
+  .sponsor-card { max-height: calc(100vh - 16px); padding: 12px 14px; }
+  .sponsor-head { margin-bottom: .4em; }
+  .sponsor-head h2 { font-size: clamp(15px, 3.6vmin, 24px); }
+  .sponsor-x { width: 40px; }
+  .sponsor-note { margin-bottom: .5em; font-size: clamp(11px, 2.7vmin, 16px); line-height: 1.5; }
+  .sponsor-qr { width: min(42vh, 46vw); padding: 5px; }
+  .sponsor-hint { margin-top: .5em; font-size: clamp(10px, 2.3vmin, 14px); }
+  .sponsor-foot { margin-top: .6em; }
+  .sponsor-foot .btn { min-height: 40px; padding: .5em 1.1em; }
+}
+
+/* -------------------------------------------------------------------- */
+/* responsive fallbacks (still 4K-first)                                  */
+/* -------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .result-head { grid-template-columns: 1fr; text-align: center; }
+  .rank { margin: 0 auto; }
+  .menu-item { grid-template-columns: 34px 1fr; }
+  .mi-hint { display: none; }
+}

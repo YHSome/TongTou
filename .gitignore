@@ -1,0 +1,21 @@
+# --- generated / throwaway -------------------------------------------------
+node_modules/
+__pycache__/
+*.pyc
+
+# analyze.py's intermediate WAV (regenerate with `python tools/analyze.py`)
+tools/_analysis.wav
+
+# screenshot output: `npm run shots` regenerates these, and at 4K they are
+# ~30 MB of PNG that nobody diffs
+tools/shots/
+
+# --- a different project that happens to live in this folder ---------------
+# 合成大奶娃 (BigNaiWa) is its own game and its own repo; it is kept out of
+# this one so the published site is only TongTou.
+BigNaiWa/
+
+# --- editor / OS noise ------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp

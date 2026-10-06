@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#05070d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="TONGTOU — 浏览器里的 4K 下落式 4 键音游，支持键盘与多点触控" />
+  <title>雨爱 · TONGTOU 4K</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f1a'/%3E%3Crect x='5' y='9' width='4.5' height='14' rx='1.6' fill='%23ff6b8a'/%3E%3Crect x='11' y='5' width='4.5' height='18' rx='1.6' fill='%236bcbff'/%3E%3Crect x='17' y='5' width='4.5' height='18' rx='1.6' fill='%23a78bfa'/%3E%3Crect x='23' y='11' width='4.5' height='12' rx='1.6' fill='%23ffd166'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles/game.css" />
+
+  <!--
+    Boot guard.
+
+    This is a classic (non-module) script on purpose: modules are blocked on a
+    null origin, but classic scripts still run under file://.  That lets the page
+    explain *why* a direct double-click cannot work instead of spinning forever,
+    and the watchdog catches any other failure to reach the module entry point.
+  -->
+  <script>
+    (function () {
+      var isFile = location.protocol === 'file:';
+      var fired = false;
+
+      function showHelp() {
+        if (fired || window.TONGTOU) return;
+        fired = true;
+        var box = document.getElementById('boot-help');
+        var note = document.getElementById('boot-note');
+        var fill = document.getElementById('boot-fill');
+        if (box) box.hidden = false;
+        if (fill) fill.style.background = 'linear-gradient(90deg,#ff6b8a,#ffd166)';
+        if (note) {
+          note.textContent = isFile
+            ? '无法从 file:// 直接打开（浏览器拦截了 ES 模块）'
+            : '脚本未能载入 —— 请检查控制台报错';
+        }
+      }
+
+      window.__tongtouBootFail = showHelp;
+
+      function arm() {
+        if (isFile) showHelp();
+        // fires only if the module entry point never executed
+        setTimeout(showHelp, 6000);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', arm);
+      } else {
+        arm();
+      }
+
+      // copy-to-clipboard for the suggested commands
+      document.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-copy]') : null;
+        if (!btn) return;
+        var text = btn.getAttribute('data-copy');
+        var tag = btn.querySelector('.bh-cp');
+        var done = function () {
+          if (!tag) return;
+          var old = tag.textContent;
+          tag.textContent = '已复制';
+          setTimeout(function () { tag.textContent = old; }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, done);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err) { /* ignore */ }
+          document.body.removeChild(ta);
+          done();
+        }
+      });
+    })();
+  </script>
+</head>
+
+<body>
+  <!-- ------------------------------------------------------------------ -->
+  <!-- background layers                                                    -->
+  <!-- ------------------------------------------------------------------ -->
+  <div id="stage">
+    <video id="bga" class="bga" playsinline muted preload="auto"></video>
+    <div class="bga-veil"></div>
+    <!-- warm grade driven by the concert pyro; sits over the BGA, under the canvas -->
+    <div id="grade" class="grade"></div>
+    <canvas id="view" class="view"></canvas>
+    <!-- a phone has no Esc key, so the run needs a way out -->
+    <button id="pause-btn" class="icon-btn" type="button" aria-label="暂停">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="6.5" y="5" width="4" height="14" rx="1.3" />
+        <rect x="13.5" y="5" width="4" height="14" rx="1.3" />
+      </svg>
+    </button>
+    <!-- AUTO is a practice aid and never persists, but while it is on it must be
+         both visible and one tap away from off — on a phone there is no F2 -->
+    <button id="auto-chip" class="auto-chip" type="button" aria-label="关闭自动演奏">
+      <span class="auto-tag">AUTO</span>
+      <span class="auto-hint">点击关闭</span>
+    </button>
+  </div>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- boot                                                                 -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="boot" class="screen is-active">
+    <div class="boot-inner">
+      <p class="boot-tag">TONGTOU // 4K FALLING RHYTHM</p>
+      <h1 class="boot-title">雨爱</h1>
+      <div class="boot-bar"><i id="boot-fill"></i></div>
+      <p class="boot-note" id="boot-note">正在初始化…</p>
+
+      <div class="boot-help" id="boot-help" hidden>
+        <p class="bh-body">
+          浏览器不允许 <code>file://</code> 页面加载 ES 模块，因此直接双击
+          <code>index.html</code> 会一直停在加载中。请用下面的任意一条命令
+          在本目录启动一个本地服务器，再访问 <code>http://127.0.0.1:8080/</code>。
+        </p>
+        <button class="bh-cmd" type="button" data-copy="node serve.mjs">
+          <span class="bh-os">Node</span>
+          <code>node serve.mjs</code>
+          <span class="bh-cp">复制</span>
+        </button>
+        <button class="bh-cmd" type="button" data-copy="python -m http.server 8080">
+          <span class="bh-os">Python</span>
+          <code>python -m http.server 8080</code>
+          <span class="bh-cp">复制</span>
+        </button>
+        <p class="bh-body dim">
+          Windows 用户也可以直接双击项目根目录的 <code>start.cmd</code>，
+          它会自动启动服务器并打开浏览器。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- title                                                                -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="title" class="screen">
+    <div class="panel title-panel">
+      <p class="eyebrow">TONGTOU // 4K FALLING RHYTHM ENGINE</p>
+      <h1 class="display" id="title-name">雨爱</h1>
+      <p class="subtitle" id="title-sub">4 KEYS</p>
+
+      <div class="menu" id="title-menu">
+        <button class="menu-item" data-act="play">
+          <span class="mi-key">↵</span><span class="mi-label">开始游戏</span><span class="mi-hint">PLAY</span>
+        </button>
+        <button class="menu-item" data-act="settings">
+          <span class="mi-key">S</span><span class="mi-label">设置</span><span class="mi-hint">SETTINGS</span>
+        </button>
+        <button class="menu-item" data-act="help">
+          <span class="mi-key">H</span><span class="mi-label">操作说明</span><span class="mi-hint">HOW TO PLAY</span>
+        </button>
+        <button class="menu-item" data-act="reload">
+          <span class="mi-key">R</span><span class="mi-label">重新扫描素材</span><span class="mi-hint">RESCAN ./src</span>
+        </button>
+      </div>
+
+      <p class="footnote">
+        键位 <span id="title-keys"><kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd></span> ·
+        <kbd>Space</kbd>/<kbd>Esc</kbd> 暂停 · 目标 3840×2160
+      </p>
+      <p class="footnote dim" id="asset-note"></p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- song select                                                          -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="select" class="screen">
+    <div class="panel select-panel">
+      <p class="eyebrow">SELECT DIFFICULTY</p>
+      <h2 class="display sm" id="sel-title">雨爱</h2>
+      <p class="subtitle" id="sel-sub">BPM 162 · 4 KEYS</p>
+      <div class="tracks" id="tracks" hidden></div>
+      <div class="diffs" id="diffs"></div>
+      <div class="panel-actions">
+        <button class="btn" data-act="back">返回 <kbd>Esc</kbd></button>
+        <button class="btn primary" data-act="start">开始 <kbd>Enter</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- settings                                                             -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="settings" class="screen">
+    <div class="panel settings-panel">
+      <p class="eyebrow">SETTINGS</p>
+      <div class="settings-grid" id="settings-grid"></div>
+      <div class="panel-actions">
+        <button class="btn dev-only" data-act="dev">开发者设置</button>
+        <button class="btn" data-act="reset">恢复默认</button>
+        <button class="btn primary" data-act="back">完成 <kbd>Esc</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- developer mode                                                       -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="dev-unlock" class="screen">
+    <div class="panel lock-panel">
+      <p class="eyebrow dev-eyebrow">DEVELOPER MODE</p>
+      <h2 class="display sm dev-title">需要口令</h2>
+      <p class="dev-note">
+        开发者设置会改到渲染分辨率、界面布局、判定反馈这些不该让玩家误触的东西，
+        所以先对个口令。<br>
+        这不是安全边界——整个游戏都在浏览器里跑，能打开控制台的人就能读到口令。
+      </p>
+      <form class="lock-form" id="dev-lock-form" autocomplete="off">
+        <input class="lock-input" id="dev-password" type="password" inputmode="numeric"
+               autocomplete="off" spellcheck="false" placeholder="口令"
+               aria-label="开发者口令">
+        <button class="btn primary" id="dev-submit" type="submit">解锁</button>
+      </form>
+      <p class="lock-error" id="dev-lock-error" role="alert"></p>
+      <div class="panel-actions">
+        <button class="btn" data-act="dev-cancel">返回 <kbd>Esc</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="dev" class="screen">
+    <div class="panel dev-panel">
+      <p class="eyebrow dev-eyebrow">DEVELOPER MODE</p>
+      <h2 class="display sm dev-title">开发者设置</h2>
+      <p class="dev-note">
+        这些项都曾是玩家设置，为了让设置界面保持六行而收进了常量。
+        改动会立即生效并写进本地存储；<kbd>F9</kbd> 可随时开关开发者模式。
+      </p>      <div class="settings-grid dev-grid" id="dev-grid"></div>
+      <div class="panel-actions">
+        <button class="btn" data-act="dev-reset">恢复开发者默认</button>
+        <button class="btn" data-act="dev-off">退出开发者模式</button>
+        <button class="btn primary" data-act="dev-back">返回 <kbd>Esc</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- how to play                                                          -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="help" class="screen">
+    <div class="panel wide">
+      <p class="eyebrow">HOW TO PLAY</p>
+      <div class="help-grid">
+        <div>
+          <h3>判定</h3>
+          <ul class="ruled">
+            <li><b data-j="perfect">PERFECT</b><span>±22 ms · 2.0 分</span></li>
+            <li><b data-j="great">GREAT</b><span>±45 ms · 1.0 分</span></li>
+            <li><b data-j="good">GOOD</b><span>±80 ms · 0.5 分</span></li>
+            <li><b data-j="bad">BAD</b><span>±130 ms · 0 分</span></li>
+            <li><b data-j="miss">MISS</b><span>超出窗口 · 断连</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>操作</h3>
+          <ul class="ruled">
+            <li><b id="help-keys"><kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd></b><span>四条轨道（可在设置里改）</span></li>
+            <li><b>轻触轨道</b><span>触屏：整列都是判定区</span></li>
+            <li><b>多指同时</b><span>可同时击打 4 条轨道</span></li>
+            <li><b>Space / Esc</b><span>暂停 / 继续</span></li>
+            <li><b>R</b><span>重开本局</span></li>
+            <li><b>F2</b><span>自动演奏（AUTO，开着时画面顶部有提示）</span></li>
+            <li><b>F9</b><span>开发者设置（需要口令）</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>计分</h3>
+          <ul class="ruled">
+            <li><b>SCORE</b><span>基础分 100 / 50 / 25 + 理论值（越准越高）</span></li>
+            <li><b>GAUGE</b><span>归零即失败</span></li>
+            <li><b>ACC</b><span>PERFECT 权重 100%</span></li>
+            <li><b>RANK</b><span>AAA ≥ 95%</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3>自定义谱面</h3>
+          <ul class="ruled">
+            <li><b>./src/*.mp3</b><span>音频</span></li>
+            <li><b>./src/*.mp4</b><span>BGA 视频（可省）</span></li>
+            <li><b>./src/chart/*.json</b><span>谱面（可省，缺失时自动分析）</span></li>
+            <li><b>node tools/analyze.py</b><span>离线生成高质量谱面</span></li>
+          </ul>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn primary" data-act="back">返回 <kbd>Esc</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- pause / result                                                       -->
+  <!-- ------------------------------------------------------------------ -->
+  <section id="pause" class="screen">
+    <div class="panel">
+      <p class="eyebrow">PAUSED</p>
+      <h2 class="display sm">暂停中</h2>
+      <div class="panel-actions col">
+        <button class="btn primary" data-act="resume">继续 <kbd>Space</kbd></button>
+        <button class="btn" data-act="restart">重开 <kbd>R</kbd></button>
+        <button class="btn" data-act="quit">退出到标题 <kbd>Q</kbd></button>
+      </div>
+      <p class="footnote dim">暂停时可用 <kbd>←</kbd><kbd>→</kbd> 调整进度，<kbd>↑</kbd><kbd>↓</kbd> 调整判定偏移</p>
+    </div>
+  </section>
+
+  <section id="result" class="screen">
+    <div class="panel wide">
+      <p class="eyebrow" id="res-eyebrow">RESULT</p>
+      <div class="result-head">
+        <div class="rank" id="res-rank">S</div>
+        <div class="result-score">
+          <p class="label">SCORE</p>
+          <p class="value" id="res-score">0000000</p>
+          <p class="label" id="res-clear">CLEARED</p>
+        </div>
+        <div class="result-acc">
+          <p class="label">ACCURACY</p>
+          <p class="value" id="res-acc">100.00%</p>
+          <p class="label" id="res-combo">MAX COMBO 0</p>
+        </div>
+      </div>
+      <div class="result-grid" id="res-grid"></div>
+      <div class="panel-actions">
+        <button class="btn" data-act="quit">标题 <kbd>Q</kbd></button>
+        <button class="btn" data-act="select">选难度</button>
+        <button class="btn primary" data-act="retry">再来一次 <kbd>R</kbd></button>
+      </div>
+      <div class="panel-actions sponsor-row">
+        <button class="btn sponsor" id="sponsor-btn" type="button" data-act="sponsor">
+          🌶️ 可以请作者吃包辣条嘛
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <!-- 赞赏：纯静态弹窗，不发任何网络请求                                     -->
+  <!-- ------------------------------------------------------------------ -->
+  <div class="sponsor-modal" id="sponsor-modal" role="dialog" aria-modal="true"
+       aria-label="赞赏作者" aria-hidden="true">
+    <div class="sponsor-card">
+      <header class="sponsor-head">
+        <h2>🌶️ 请作者吃包辣条</h2>
+        <button class="sponsor-x" id="sponsor-x" type="button" aria-label="关闭">✕</button>
+      </header>
+      <div class="sponsor-body">
+        <p class="sponsor-note">
+          这游戏完全免费，也没有任何广告。<br>
+          要是它让你打得开心，赏作者一包辣条呗 🌶️
+        </p>
+        <img class="sponsor-qr" id="sponsor-qr" src="./assets/sponsor-qr.jpg"
+             width="480" height="480" alt="微信收款码" decoding="async">
+        <p class="sponsor-hint">微信扫一扫 · 一包辣条 · 全凭心意</p>
+        <p class="sponsor-hint sponsor-mobile-only">手机上可长按二维码保存，或用另一台设备扫</p>
+      </div>
+      <footer class="sponsor-foot">
+        <span class="sponsor-thanks">谢谢每一位投喂的玩家 ❤️</span>
+        <button class="btn" id="sponsor-ok" type="button">关闭</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./src/game/main.js"></script>
+</body>
+
+</html>
