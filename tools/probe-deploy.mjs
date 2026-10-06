@@ -143,8 +143,8 @@ async function main() {
         st.source === 'file', `source=${st.source}`);
 
       const tiers = JSON.parse(await cdp.eval('JSON.stringify(window.TONGTOU.difficulties())'));
-      ok('all three difficulty tiers came with it',
-        tiers.join(',') === 'hard,expert,extra', tiers.join(','));
+      ok('all four difficulty tiers came with it',
+        tiers.join(',') === 'easy,hard,expert,extra', tiers.join(','));
 
       // the page used to carry a 69 MB BGA video; with it gone the whole site is
       // a couple of megabytes, which is the point of removing it
