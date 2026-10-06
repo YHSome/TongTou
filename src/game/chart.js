@@ -123,8 +123,8 @@ function eventsFor(meta, raw, difficulty) {
 /* difficulty bookkeeping                                                    */
 /* ------------------------------------------------------------------------ */
 
-export const DIFFICULTY_ORDER = ['hard', 'expert', 'extra'];
-export const DIFFICULTY_LABEL = { hard: 'HARD', expert: 'EXPERT', extra: 'EXTRA' };
+export const DIFFICULTY_ORDER = ['easy', 'hard', 'expert', 'extra'];
+export const DIFFICULTY_LABEL = { easy: 'EASY', hard: 'HARD', expert: 'EXPERT', extra: 'EXTRA' };
 
 /** A 1..15 style level derived from note density, for display. */
 export function difficultyLevel(timeline) {
@@ -474,12 +474,15 @@ async function analyseTrack(audioBuffer, track, onProgress) {
   //
   // Mirrors `tools/analyze.py`.  The threshold is the *lower* of a global one
   // and one measured inside a local window, so a quiet passage still gets its
-  // share instead of being cut off entirely; `extra` then takes expert and adds
-  // a chord partner on its strongest notes, which is the only way up once the
-  // onset set is exhausted.
+  // share instead of being cut off entirely; `easy` is local-only, because one
+  // bar across the whole song always leaves the head denser than the middle and
+  // an even spread is the entire point of an easy chart; `extra` then takes
+  // expert and adds a chord partner on its strongest notes, which is the only
+  // way up once the onset set is exhausted.
   const byStrength = [...notes].sort((a, b) => b.s - a.s);
-  const ratios = { hard: 0.78, expert: 1.0 };
-  const localRatios = { hard: 0.82, expert: 1.0 };
+  const ratios = { easy: 0.24, hard: 0.78, expert: 1.0 };
+  const localRatios = { easy: 0.24, hard: 0.82, expert: 1.0 };
+  const localOnly = new Set(['easy']);
   const window = Math.max(1, Math.round(8.0 / tickDur));
   const jackTicks = Math.round(0.1 / tickDur);
 
@@ -501,6 +504,7 @@ async function analyseTrack(audioBuffer, track, onProgress) {
         for (const i of idx) floor[i] = sorted[want - 1];
       }
     }
+    if (localOnly.has(name)) return (i) => floor[i];
     return (i) => Math.min(global, floor[i]);
   }
 

@@ -564,10 +564,18 @@ def main():
     # decides what the tier already handled; the local one can only ever lower
     # the bar, so nothing that used to be charted disappears -- sparse windows
     # are topped up to their share and the rest is left alone.
-    ratios = {"hard": 0.78, "expert": 1.0}
+    #
+    # `easy` is the exception: it is local-only.  A global threshold is one bar
+    # across the whole song, and this song's onsets do not sit on one scale, so
+    # any global component leaves the head measurably denser than the middle.
+    # An even spread is the whole point of an easy chart, and a purely local
+    # quota is the only thing that actually delivers it.  (It also keeps easy a
+    # strict subset of hard: lowering a tier's bar can only add notes.)
+    ratios = {"easy": 0.24, "hard": 0.78, "expert": 1.0}
     # The local share runs a little ahead of the global one, because a window
     # that happens to be quiet should still be playable rather than empty.
-    local_ratios = {"hard": 0.82, "expert": 1.0}
+    local_ratios = {"easy": 0.24, "hard": 0.82, "expert": 1.0}
+    local_only = {"easy"}
     tier_span = max(1, int(round(TIER_WINDOW_S / tick_dur)))
 
     def local_floor(ratio):
@@ -593,7 +601,8 @@ def main():
     for name, ratio in ratios.items():
         n_keep = int(round(len(tick_arr) * ratio))
         thr = np.sort(raw_s)[::-1][n_keep - 1] if n_keep > 0 else 1e9
-        bar = np.minimum(thr, local_floor(local_ratios[name]))
+        local = local_floor(local_ratios[name])
+        bar = local if name in local_only else np.minimum(thr, local)
         out, last_tick, last_lane = [], -10 ** 9, -1
         for i in range(len(tick_arr)):
             if raw_s[i] < bar[i]:
@@ -737,7 +746,7 @@ def main():
     if requested:
         print("fire cues         : %d requested (%s)"
               % (len(requested), "auto" if FIRE_AUTO else ", ".join(sorted(FIRE_CUES))))
-        for name in ("hard", "expert", "extra"):
+        for name in charts:
             if name not in events_by_diff:
                 continue
             print("  %-7s %d bursts  %s"

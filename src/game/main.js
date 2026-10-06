@@ -36,7 +36,7 @@ const renderer = new Renderer($('#view'));
 let loaded = null;            // { meta, charts, source }
 const tracks = [];            // discoverable tracks (manifest or built-in)
 let track = { ...DEFAULT_TRACK };
-let difficulty = 'hard';
+let difficulty = 'easy';
 let devMode = loadDevMode();
 let devReturnTo = 'settings';   // where the developer screens fall back to
 let timeline = null;
@@ -344,7 +344,7 @@ async function boot() {
 
     await loadTrack(track);
 
-    setDifficulty('hard');
+    setDifficulty('easy');
     setTimeout(() => { setMode('title'); show('title'); }, 260);
   } catch (err) {
     console.error(err);

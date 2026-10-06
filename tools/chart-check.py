@@ -110,7 +110,7 @@ def main():
     print()
     beat_phase_check(env, fps, bpm, off)
 
-    for name in [args.difficulty] + [d for d in ("hard", "expert", "extra")
+    for name in [args.difficulty] + [d for d in ("easy", "hard", "expert", "extra")
                                      if d != args.difficulty]:
         notes = data["charts"].get(name)
         if not notes:

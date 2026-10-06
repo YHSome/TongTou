@@ -69,7 +69,7 @@ for (const [name, list] of Object.entries(raw.charts)) {
 }
 
 section('note arrays');
-ok('three difficulties', Object.keys(charts).length === 3, Object.keys(charts).join(','));
+ok('four difficulties', Object.keys(charts).length === 4, Object.keys(charts).join(','));
 // the UI order must match what the chart actually ships, or a tier silently
 // disappears from the select screen (or gains a card with no chart behind it)
 ok('the UI order lists exactly the shipped tiers',
@@ -92,11 +92,24 @@ for (const [name, tl] of Object.entries(charts)) {
 }
 
 // difficulty must increase monotonically in density
-const order = ['hard', 'expert', 'extra'];
+const order = ['easy', 'hard', 'expert', 'extra'];
 for (let i = 1; i < order.length; i++) {
   ok(`density rises ${order[i - 1]} -> ${order[i]}`,
     charts[order[i]].total > charts[order[i - 1]].total,
     `${charts[order[i - 1]].total} -> ${charts[order[i]].total}`);
+}
+
+// A harder tier must be a superset of the easier one.  If a lower tier charted
+// a note the higher tier dropped, "harder" would be a lie: the harder chart
+// would be missing something the easier one asks for.  It falls out of the
+// thresholds (each tier's bar is at or below the tier below it) but it is worth
+// nailing down, because a future tweak to one ratio could quietly break it.
+for (let i = 1; i < order.length; i++) {
+  const lo = new Set(charts[order[i - 1]].notes.map((n) => `${n.time.toFixed(6)}:${n.lane}`));
+  const hi = new Set(charts[order[i]].notes.map((n) => `${n.time.toFixed(6)}:${n.lane}`));
+  const missing = [...lo].filter((k) => !hi.has(k));
+  ok(`${order[i - 1]} is a subset of ${order[i]}`, missing.length === 0,
+    `${missing.length} note(s) only in ${order[i - 1]}${missing.length ? `, e.g. ${missing[0]}` : ''}`);
 }
 
 // minimum spacing must stay playable
@@ -149,7 +162,10 @@ for (const name of order) {
   ok(`${name}: every quarter of the song is charted`,
     Math.min(...q) >= avg * QUARTER_FLOOR,
     `quarters ${q.join('/')} vs avg ${avg.toFixed(0)}`);
-  ok(`${name}: no quarter is left nearly empty`, Math.min(...q) >= 30,
+  // An absolute floor as well, so a tier that is sparse everywhere cannot pass
+  // the relative check by being uniformly empty.  It has to stay small enough
+  // for `easy`, whose whole quarter averages under thirty notes.
+  ok(`${name}: no quarter is left nearly empty`, Math.min(...q) >= 12,
     `thinnest quarter has ${Math.min(...q)} notes`);
   // and the tail specifically: the last quarter must not be a wasteland
   ok(`${name}: the final quarter carries its weight`, q[3] >= avg * 0.45,

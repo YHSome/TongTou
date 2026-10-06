@@ -195,24 +195,25 @@ async function main() {
       return JSON.stringify({ t, cards, active: window.TONGTOU.state.difficulty });
     })()`));
     console.log(`  tiers: ${tiers.t.join(' / ')}  active=${tiers.active}`);
-    check('the chart ships exactly hard / expert / extra',
-      tiers.t.join(',') === 'hard,expert,extra', tiers.t.join(','));
-    check('each tier has a note count', tiers.t.length === 3 && JSON.stringify(tiers.t) === JSON.stringify(['hard', 'expert', 'extra']));
+    check('the chart ships exactly easy / hard / expert / extra',
+      tiers.t.join(',') === 'easy,hard,expert,extra', tiers.t.join(','));
     check('the select screen shows one card per tier',
-      tiers.cards.length === 3 && tiers.cards.every((c, i) => c.name === tiers.t[i]),
+      tiers.cards.length === 4 && tiers.cards.every((c, i) => c.name === tiers.t[i]),
       tiers.cards.map((c) => c.name).join(','));
-    check('the cards are labelled HARD / EXPERT / EXTRA',
-      tiers.cards.map((c) => c.label).join(',') === 'HARD,EXPERT,EXTRA',
+    check('the cards are labelled EASY / HARD / EXPERT / EXTRA',
+      tiers.cards.map((c) => c.label).join(',') === 'EASY,HARD,EXPERT,EXTRA',
       tiers.cards.map((c) => c.label).join(','));
     check('the default difficulty is the easiest shipped tier',
-      tiers.active === 'hard', tiers.active);
+      tiers.active === 'easy', tiers.active);
     check('the default card is the selected one',
       tiers.cards[0] && tiers.cards[0].selected === 'true', JSON.stringify(tiers.cards[0]));
     // difficulty must read as a progression in the UI too
     const lvs = tiers.cards.map((c) => Number(c.lv));
-    check('the displayed levels climb', lvs[0] < lvs[1] && lvs[1] < lvs[2], lvs.join(' < '));
+    check('the displayed levels climb',
+      lvs.every((v, i) => i === 0 || v > lvs[i - 1]), lvs.join(' < '));
     const counts = tiers.cards.map((c) => Number((c.meta.match(/(\d+) NOTES/) || [])[1]));
-    check('the note counts climb', counts[0] < counts[1] && counts[1] < counts[2], counts.join(' < '));
+    check('the note counts climb',
+      counts.every((v, i) => i === 0 || v > counts[i - 1]), counts.join(' < '));
 
     const timelineInfo = await cdp.eval(`JSON.stringify({
       mode: window.TONGTOU.state.mode,
@@ -266,21 +267,26 @@ async function main() {
 
     await sendKey('Enter', 'Enter', 13, '\r');     // title -> select
 
-    // arrow keys step through the tiers; the list changed shape, so make sure
-    // the cycling still visits every one and wraps
+    // arrow keys step through the tiers; the list changed shape again, so make
+    // sure the cycling still visits every one and wraps
     const cycled = [];
     for (let i = 0; i < 4; i++) {
       cycled.push(await cdp.eval('window.TONGTOU.state.difficulty'));
       await sendKey('ArrowRight', 'ArrowRight', 39, '');
     }
     console.log(`  arrow cycling: ${cycled.join(' -> ')}`);
-    check('arrow keys visit all three tiers and wrap',
-      cycled.join(',') === 'hard,expert,extra,hard', cycled.join(','));
+    check('arrow keys visit all four tiers in order',
+      cycled.join(',') === 'easy,hard,expert,extra', cycled.join(','));
+    check('cycling wraps back to the easiest tier',
+      (await cdp.eval('window.TONGTOU.state.difficulty')) === 'easy',
+      await cdp.eval('window.TONGTOU.state.difficulty'));
 
-    // the loop above ends on `expert`; two more steps land back on hard, which
-    // keeps the rest of the suite on the tier the default selects
-    for (let i = 0; i < 2; i++) await sendKey('ArrowRight', 'ArrowRight', 39, '');
-    check('cycling returns to hard',
+    // Now step up one tier for the run itself.  `easy` is only 0.84 NPS, and the
+    // mechanics checked below (AUTO resolving every due note, per-lane hit sounds)
+    // need enough notes inside their measurement windows to mean anything — on
+    // easy they would pass by having almost nothing to measure.
+    await sendKey('ArrowRight', 'ArrowRight', 39, '');
+    check('the run uses a tier dense enough to measure',
       (await cdp.eval('window.TONGTOU.state.difficulty')) === 'hard',
       await cdp.eval('window.TONGTOU.state.difficulty'));
 
