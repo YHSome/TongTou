@@ -5,14 +5,12 @@
       "title": "雨爱",
       "artist": "翻唱版",
       "audio": "src/雨爱.mp3",
-      "bga": "src/雨爱.mp4",
       "chart": "src/chart/雨爱.json"
     },
     {
       "title": "另一首歌",
       "artist": "example",
       "audio": "src/another-song.mp3",
-      "bga": "src/another-song.mp4",
       "chart": "src/chart/another-song.json"
     }
   ]

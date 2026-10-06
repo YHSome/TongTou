@@ -8,7 +8,8 @@
  * A server is required: `fetch()`, `decodeAudioData()` and <video> seeking all
  * refuse to read local files over `file://`.
  *
- * Byte ranges are supported so the browser can seek inside the BGA video.
+ * Byte ranges are supported so the browser can seek inside the audio without
+ * pulling the whole file down again.
  */
 
 import { createServer, get as httpGet } from 'node:http';

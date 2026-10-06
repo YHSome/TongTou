@@ -89,9 +89,8 @@
   <!-- background layers                                                    -->
   <!-- ------------------------------------------------------------------ -->
   <div id="stage">
-    <video id="bga" class="bga" playsinline muted preload="auto"></video>
-    <div class="bga-veil"></div>
-    <!-- warm grade driven by the concert pyro; sits over the BGA, under the canvas -->
+    <!-- warm grade driven by the concert pyro; sits over the stage background,
+         under the canvas -->
     <div id="grade" class="grade"></div>
     <canvas id="view" class="view"></canvas>
     <!-- a phone has no Esc key, so the run needs a way out -->
@@ -290,7 +289,6 @@
           <h3>自定义谱面</h3>
           <ul class="ruled">
             <li><b>./src/*.mp3</b><span>音频</span></li>
-            <li><b>./src/*.mp4</b><span>BGA 视频（可省）</span></li>
             <li><b>./src/chart/*.json</b><span>谱面（可省，缺失时自动分析）</span></li>
             <li><b>node tools/analyze.py</b><span>离线生成高质量谱面</span></li>
           </ul>

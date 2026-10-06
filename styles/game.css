@@ -1,7 +1,8 @@
 /* ==========================================================================
    TONGTOU 4K — shell, screens and HUD chrome
    The playfield itself is drawn on <canvas>; this file only styles the
-   surrounding DOM (menus, settings, results) and the BGA layer.
+   surrounding DOM (menus, settings, results, stage background) and leaves the
+   playfield itself to <canvas>.
    ========================================================================== */
 
 :root {
@@ -68,36 +69,20 @@ body { cursor: default; }
 /* -------------------------------------------------------------------- */
 /* background stage                                                       */
 /* -------------------------------------------------------------------- */
+
+/* There is no BGA video any more — a 69 MB asset for a background was the
+   single heaviest thing on the page, and it read worse under the lanes than a
+   dark field does.  What is left is the gradient, plus the vignette that used
+   to sit over the video to keep the HUD legible. */
 #stage {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   background:
-    radial-gradient(120% 90% at 20% 10%, #131c33 0%, #070a13 55%, #04060b 100%);
-}
-
-.bga {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity .8s ease;
-  filter: saturate(1.05) contrast(1.04);
-  will-change: opacity;
-}
-
-.bga.ready { opacity: .78; }
-
-.bga-veil {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
     linear-gradient(90deg, rgba(4, 6, 11, .92) 0%, rgba(4, 6, 11, .58) 42%, rgba(4, 6, 11, .30) 68%, rgba(4, 6, 11, .62) 100%),
-    radial-gradient(140% 110% at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .55) 100%);
+    radial-gradient(140% 110% at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .55) 100%),
+    radial-gradient(120% 90% at 20% 10%, #131c33 0%, #070a13 55%, #04060b 100%);
 }
 
 .view {
@@ -194,9 +179,9 @@ body[data-auto="1"][data-mode="play"] .auto-chip { display: inline-flex; }
 /* concert-pyro colour grade                                             */
 /* --------------------------------------------------------------------- */
 
-/* The cold->warm shift is applied here (over the BGA) and to the <video> via a
-   CSS filter set from JS, so the whole picture is graded -- not just whatever
-   the canvas happens to paint.  Opacity is driven per frame, so no transition. */
+/* The cold->warm shift is applied here (between the stage background and the
+   canvas) and, on top of the lanes, by the canvas wash the pyro draws itself.
+   Opacity and filter are driven per frame, so no transition. */
 .grade {
   position: absolute;
   inset: 0;
@@ -264,10 +249,20 @@ body[data-auto="1"][data-mode="play"] .auto-chip { display: inline-flex; }
 /* developer mode                                                        */
 /* -------------------------------------------------------------------- */
 
-/* The developer entries are simply not in the layout unless the mode is on:
-   `hidden` is set from JS as well, so Tab and "tap the button that is not
-   there" both come up empty. */
-body:not([data-dev="1"]) .dev-only { display: none; }
+/* The entry point is always in the layout.
+ *
+ * It used to be hidden until the mode was already unlocked, on the theory that
+ * a player should not stumble into it.  That bought nothing — the button only
+ * opens the password prompt, it never unlocks anything — and it cost
+ * reachability: a phone has no F9, so with the button hidden the developer
+ * screen was unreachable on every touch device.  The password is the gate; the
+ * button is just a doorbell. */
+.dev-only { width: 100%; }
+
+body[data-dev="1"] .dev-only {
+  border-color: rgba(255, 176, 32, .5);
+  color: #ffd9a0;
+}
 
 .dev-panel { width: clamp(760px, 84vmin, 2400px); }
 

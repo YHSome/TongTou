@@ -298,7 +298,7 @@ export class Renderer {
       c.lineWidth = Math.max(2, H * 0.0024);
       c.strokeRect(L.fieldX, L.fieldTop, L.fieldW, L.fieldBottom - L.fieldTop);
     } else {
-      // a bright rule along the top edge keeps the lanes readable over the BGA
+      // a bright rule along the top edge keeps the lanes readable over the backdrop
       c.fillStyle = 'rgba(150,180,255,0.22)';
       c.fillRect(0, L.fieldTop - Math.max(1, H * 0.0015), W, Math.max(1, H * 0.0015));
     }
@@ -755,7 +755,7 @@ export class Renderer {
    *
    * (This replaced a curtain of stage-pyro flames.  At any frame rate they read
    * as a texture map rather than as fire, and the warm colour grade over the
-   * BGA — which is what actually sells the moment — is unchanged.)
+   * backdrop — which is what actually sells the moment — is unchanged.)
    */
   _drawShowCue(c, time) {
     this._drawAura(c, this._fireActive || [], time);

@@ -14,7 +14,6 @@ import {
   loadDevMode, saveDevMode, devOfferedByUrl, DEV_PASSWORD,
 } from './config.js';
 import { AudioEngine } from './audio.js';
-import { BgaLayer } from './bga.js';
 import { Input } from './input.js';
 import { Engine } from './engine.js';
 import { Renderer } from './render.js';
@@ -31,7 +30,6 @@ import {
 
 const settings = loadSettings();
 const audio = new AudioEngine();
-const bga = new BgaLayer($('#bga'));
 const input = new Input(window);
 const renderer = new Renderer($('#view'));
 
@@ -79,23 +77,23 @@ async function goFullscreen() {
 /**
  * Drive the whole-screen cold -> warm grade from the pyro's intensity.
  *
- * The BGA is a <video> element behind the canvas, so the canvas alone can never
- * tint it.  A CSS filter on the video plus the `#grade` overlay covers the whole
- * picture; the canvas adds the matching wash over the playfield.
+ * The playfield is drawn on the canvas, so the canvas alone can never tint what
+ * is *behind* it.  The `#grade` overlay sits between the stage background and the
+ * canvas and covers the whole picture; the canvas adds the matching wash over the
+ * lanes on top.
  */
 let lastGrade = -1;
 function applyFireGrade(w) {
   if (Math.abs(w - lastGrade) < 0.006) return;
   lastGrade = w;
-  const b = Number(settings.bgaDim) || 0.78;
-  $('#bga').style.filter =
-    `saturate(${(1.05 + 0.50 * w).toFixed(3)})`
-    + ` contrast(${(1.04 + 0.06 * w).toFixed(3)})`
-    + ` brightness(${(b * (1 + 0.22 * w)).toFixed(3)})`
-    + ` sepia(${(0.36 * w).toFixed(3)})`
-    + ` hue-rotate(${(-12 * w).toFixed(1)}deg)`;
   const grade = document.getElementById('grade');
-  if (grade) grade.style.opacity = String(Math.min(1, w * 1.05));
+  if (grade) {
+    grade.style.opacity = String(Math.min(1, w * 1.05));
+    // the overlay also carries the warm shift the BGA used to get from a filter
+    grade.style.filter = `saturate(${(1 + 0.45 * w).toFixed(3)})`
+      + ` sepia(${(0.36 * w).toFixed(3)})`
+      + ` hue-rotate(${(-12 * w).toFixed(1)}deg)`;
+  }
 }
 
 function applySettingsToLive() {
@@ -117,17 +115,21 @@ function applySettingsToLive() {
 /* ------------------------------------------------------------------------ */
 
 /**
- * Reveal the developer screen.
+ * Reflect developer mode on the page.
  *
- * The screen itself is built the same way the player settings screen is — the
- * only difference is who gets to see it.  `body[data-dev]` drives the CSS, and
- * the entry button on the settings screen is `hidden` outright when the mode is
- * off so a stray tap or Tab can never reach it.
+ * The entry button on the settings screen is deliberately *always* there — see
+ * the note on `.dev-only` in the stylesheet.  It never unlocks anything by
+ * itself, so hiding it bought no safety and cost reachability: a phone has no
+ * `F9`, and with the button hidden the developer screen was simply unreachable
+ * on touch devices.
  */
 function applyDevMode() {
   document.body.dataset.dev = devMode ? '1' : '0';
   const entry = document.querySelector('.dev-only');
-  if (entry) entry.hidden = !devMode;
+  if (entry) {
+    entry.hidden = false;
+    entry.textContent = devMode ? '开发者设置 · 已解锁' : '开发者设置';
+  }
   saveDevMode(devMode);
 }
 
@@ -280,7 +282,6 @@ async function discoverTracks() {
       title: t.title || 'untitled',
       artist: t.artist || 'unknown',
       audio: t.audio,
-      bga: t.bga || '',
       chart: t.chart || '',
     }));
 
@@ -374,17 +375,13 @@ async function loadTrack(t) {
   setBootProgress(0.72, '载入谱面…');
   loaded = await loadChart(track, audio.buffer, (msg) => setBootProgress(0.78, msg));
 
-  setBootProgress(0.9, '加载 BGA…');
-  await bga.load(track.bga);
-
   setBootProgress(1, '就绪');
   applySettingsToLive();
 
   const note = loaded.source === 'file'
     ? `谱面: ${track.chart}`
     : `谱面: 浏览器实时分析生成 (${loaded.meta.bpm.toFixed(2)} BPM)`;
-  $('#asset-note').textContent =
-    `${note} · BGA ${bga.available ? '已加载' : '不可用'} · 渲染 ${renderer.W}×${renderer.H}`;
+  $('#asset-note').textContent = `${note} · 渲染 ${renderer.W}×${renderer.H}`;
 
   // title screen reflects the actual track metadata
   $('#title-name').textContent = loaded.meta.title;
@@ -396,7 +393,6 @@ async function loadTrack(t) {
 async function selectTrack(t) {
   if (t === track) return;
   audio.stop();
-  bga.stop();
   renderTrackList();
   try {
     await loadTrack(t);
@@ -448,8 +444,6 @@ async function startPlay(from = 0) {
   audio.setVolume(settings.volume);
 
   audio.play(from);
-  bga.sync(true);
-  if (!settings.bga) bga.video.pause();
 
   setMode('play');
   show(null);
@@ -460,7 +454,6 @@ async function startPlay(from = 0) {
 function pausePlay() {
   if (mode !== 'play') return;
   audio.pause();
-  bga.pause();
   setMode('pause');
   show('pause');
 }
@@ -468,7 +461,6 @@ function pausePlay() {
 async function resumePlay() {
   if (mode !== 'pause') return;
   await audio.unpause();
-  bga.resume(audio.now());
   setMode('play');
   show(null);
   lastFrame = performance.now();
@@ -476,7 +468,6 @@ async function resumePlay() {
 
 function quitToTitle() {
   audio.stop();
-  bga.stop();
   renderer.clear();
   document.body.dataset.playing = '0';
   setMode('title');
@@ -488,7 +479,6 @@ function finishPlay() {
   const summary = engine.summary();
   renderResult(summary, timeline, difficulty);
   audio.stop();
-  bga.pause();
   renderer.clear();
   document.body.dataset.playing = '0';
   setMode('result');
@@ -541,7 +531,6 @@ function frame(now) {
   }
   renderer.ingest([], t);             // expire finished effects
 
-  bga.update(t, mode === 'play' && settings.bga);
 
   renderer.draw({
     time: t,
@@ -736,7 +725,6 @@ const INTERNAL_LABELS = {
   autoPlay: '自动演奏',
   hitFx: '打击反馈',
   noteTravel: '下落时长',
-  bga: 'BGA 视频',
   visualizer: '频谱',
   showKeyCues: '键位提示',
   noFail: '练习模式',
@@ -802,12 +790,8 @@ function onSettingChange(key, value) {
     clearTimeout(offsetGuideTimer);
     offsetGuideTimer = setTimeout(() => { renderer.debugTiming = false; }, 4000);
   }
-  if (key === 'renderScale' || key === 'layout' || key === '*' || key === 'bgaDim' || key === 'bga') {
+  if (key === 'renderScale' || key === 'layout' || key === '*') {
     appliedResize(true);
-  }
-  if (key === 'bga' || key === '*') {
-    if (settings.bga && mode === 'play') bga.resume(audio.now());
-    else bga.pause();
   }
 }
 

@@ -225,20 +225,25 @@ async function main() {
     const sz = JSON.parse(size);
     check('renderer sized the canvas', sz.w > 0 && sz.h > 0, `${sz.w}x${sz.h}`);
 
-    // ---- BGA (this asset gets swapped out by hand, so verify it landed) ---
-    const bga = JSON.parse(await cdp.eval(`(() => {
-      const v = document.getElementById('bga');
+    // ---- no BGA ----------------------------------------------------------
+    // The video was removed on purpose (69 MB for a background), so make sure
+    // nothing is still reaching for it: a leftover reference would either 404 or
+    // silently leave a black band where the stage background should be.
+    const bgaLeftovers = JSON.parse(await cdp.eval(`(() => {
+      const stage = document.getElementById('stage');
+      const layers = [...stage.children].map((el) => el.id || el.className);
+      const cs = getComputedStyle(stage);
       return JSON.stringify({
-        w: v.videoWidth, h: v.videoHeight,
-        dur: Number.isFinite(v.duration) ? +v.duration.toFixed(2) : null,
-        ready: v.readyState,
-        src: (v.currentSrc || '').split('/').pop(),
+        video: !!document.getElementById('bga'),
+        media: stage.querySelectorAll('video, audio').length,
+        layers,
+        background: cs.backgroundImage.includes('gradient'),
       });
     })()`));
-    console.log(`  bga: ${bga.w}x${bga.h}, ${bga.dur}s, readyState=${bga.ready}, ${bga.src}`);
-    check('the BGA video decoded', bga.w > 0 && bga.h > 0, `${bga.w}x${bga.h}`);
-    check('the BGA covers the whole track',
-      bga.dur !== null && Math.abs(bga.dur - 140.04) < 1.0, `${bga.dur}s vs 140.04s`);
+    console.log(`  stage layers: ${bgaLeftovers.layers.join(' / ')}`);
+    check('the BGA element is gone', bgaLeftovers.video === false && bgaLeftovers.media === 0);
+    check('the stage still paints its own background',
+      bgaLeftovers.background === true);
 
     // ---- enter select + play --------------------------------------------
     // CDP input events are trusted, so they grant user activation the way a
@@ -930,27 +935,28 @@ async function main() {
       at(0.8) > fxPeak * 0.25 && at(0.9) > fxPeak * 0.05 && at(0.95) > 0,
       `u0.8=${at(0.8)} u0.9=${at(0.9)} u0.95=${at(0.95)}`);
 
-    // and the whole-screen grade must actually follow it
+    // and the whole-screen grade must actually follow it.  With the BGA gone the
+    // grade layer is the only thing painting the shift outside the canvas, so it
+    // carries both the opacity ramp and the warm filter.
     const grade = JSON.parse(await cdp.eval(`(() => {
-      const s = window.TONGTOU.state.settings;
       const real = window.TONGTOU.engine.timeline.events;
       const r = window.TONGTOU.renderer, eng = window.TONGTOU.engine;
       const tl = eng.timeline, t = window.TONGTOU.audio.now();
-      const v = document.getElementById('bga');
+      const layer = document.getElementById('grade');
       const out = {};
       for (const [label, u] of [['idle', null], ['mid', 0.4]]) {
         tl.events = u === null ? [] : [{ time: t - u * 3.5, type: 'fire', cue: 'g' }];
         r._fireActive = r._fireState(t, tl);
         r.fireGlow = r._fireActive.length ? r.fireGlow : 0;
         window.TONGTOU.applyGrade(r.fireGlow);
-        out[label] = { filter: v.style.filter, overlay: document.getElementById('grade').style.opacity };
+        out[label] = { filter: layer.style.filter, overlay: layer.style.opacity };
       }
       tl.events = real;
       return JSON.stringify(out);
     })()`));
-    console.log(`  grade idle: ${grade.idle.filter}`);
-    console.log(`  grade mid : ${grade.mid.filter}  (overlay ${grade.mid.overlay})`);
-    check('the video gets a warm filter during the burst',
+    console.log(`  grade idle: overlay=${grade.idle.overlay} filter=${grade.idle.filter}`);
+    console.log(`  grade mid : overlay=${grade.mid.overlay} filter=${grade.mid.filter}`);
+    check('the grade layer gets a warm filter during the burst',
       /sepia\(0\.[2-9]/.test(grade.mid.filter) && /hue-rotate\(-/.test(grade.mid.filter),
       grade.mid.filter);
     check('the warm overlay ramps with it',
@@ -1219,8 +1225,10 @@ async function main() {
 
     const off1 = await devProbe();
     check('developer mode starts off', off1.dev === false && off1.bodyFlag === '0', off1.bodyFlag);
-    check('its entry point is not reachable while off',
-      off1.entryHidden === true && off1.entryVisible === false,
+    // The entry point is always there — it only opens the prompt, so hiding it
+    // bought nothing and made the screen unreachable on a phone (no F9).
+    check('the entry point is present and reachable before unlocking',
+      off1.entryHidden === false && off1.entryVisible === true,
       `hidden=${off1.entryHidden} visible=${off1.entryVisible}`);
     check('the player settings screen is still exactly six rows',
       off1.rows.length === 6, off1.rows.join(' / '));
@@ -1268,8 +1276,10 @@ async function main() {
     const backedOut = await devProbe();
     check('Esc leaves the prompt for the settings screen',
       backedOut.screen === 'settings' && backedOut.dev === false, backedOut.screen);
-    check('the settings screen still hides the entry point',
-      backedOut.entryHidden === true && backedOut.rows.length === 6);
+    check('the settings screen keeps the entry point and its six rows',
+      backedOut.entryHidden === false && backedOut.entryVisible === true
+      && backedOut.rows.length === 6,
+      `visible=${backedOut.entryVisible} rows=${backedOut.rows.length}`);
 
     // the right password opens it
     await sendKey('F9', 'F9', 120, '');
@@ -1306,7 +1316,7 @@ async function main() {
     console.log(`  developer groups: ${devRows.groups.join(' / ')}`);
     console.log(`  developer rows  : ${devRows.rows.map((r) => r.label).join(' / ')}`);
 
-    const wanted = ['渲染分辨率', '界面布局', '整体压暗', '播放 BGA', 'BGA 亮度', '频谱可视化',
+    const wanted = ['渲染分辨率', '界面布局', '整体压暗', '频谱可视化',
       '键位提示', '开局全屏', '下落时长', '打击反馈', '实时判定偏差', '练习模式',
       '打击音效音量', '自动演奏（AUTO）'];
     const got = devRows.rows.map((r) => r.label);
@@ -1431,11 +1441,12 @@ async function main() {
       && !('dev' in JSON.parse(await cdp.eval('localStorage.getItem("tongtou.settings.v1")'))),
       await cdp.eval('localStorage.getItem("tongtou.dev.v1")'));
 
-    // ...and turning it off puts the button away for good
+    // ...and turning it off leaves the button where it was
     await cdp.eval('window.TONGTOU.setDevMode(false); true');
     await sleep(250);
-    check('turning it off hides the entry point again',
-      (await cdp.eval(`document.querySelector('#settings .dev-only').hidden`)) === true);
+    check('turning it off keeps the entry point in place for next time',
+      (await cdp.eval(`document.querySelector('#settings .dev-only').hidden`)) === false
+      && (await cdp.eval(`document.querySelector('#settings .dev-only').offsetParent !== null`)) === true);
     check('and clears the stored flag',
       (await cdp.eval('localStorage.getItem("tongtou.dev.v1")')) === null,
       String(await cdp.eval('localStorage.getItem("tongtou.dev.v1")')));

@@ -197,6 +197,49 @@ async function main() {
       (await cdp.eval('navigator.maxTouchPoints')) >= 1,
       `maxTouchPoints=${await cdp.eval('navigator.maxTouchPoints')}`);
 
+    /* ---- the developer entry must exist on a phone ---------------------- */
+    // A phone has no F9, so the settings-screen button is the only way in.  It
+    // used to be hidden until the mode was already unlocked, which made the
+    // whole developer screen unreachable on every touch device.
+    {
+      await tap(await centreOf('#title-menu [data-act="settings"]'));
+      ok('the settings screen opens on a phone',
+        (await cdp.eval('window.TONGTOU.state.mode')) === 'settings',
+        await cdp.eval('window.TONGTOU.state.mode'));
+      const entry = JSON.parse(await cdp.eval(`(() => {
+        const b = document.querySelector('#settings .dev-only');
+        const r = b.getBoundingClientRect();
+        return JSON.stringify({ hidden: b.hidden, shown: b.offsetParent !== null,
+          w: Math.round(r.width), h: Math.round(r.height),
+          top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight });
+      })()`));
+      console.log(`  dev entry ${entry.w}x${entry.h} at y${entry.top}..${entry.bottom} of ${entry.vh}`);
+      ok('a phone can see the developer entry', entry.shown && !entry.hidden);
+      ok('it is a thumb-sized target', entry.w >= 80 && entry.h >= 40, `${entry.w}x${entry.h}`);
+      ok('it is inside the viewport without scrolling',
+        entry.top >= 0 && entry.bottom <= entry.vh + 1, `${entry.top}..${entry.bottom}`);
+
+      // tapping it must reach the password prompt, not the screen itself
+      await tap({ x: 20 + Math.round(entry.w / 2), y: Math.round((entry.top + entry.bottom) / 2) });
+      ok('tapping it opens the password prompt',
+        (await cdp.eval('window.TONGTOU.state.mode')) === 'dev-unlock'
+        && (await cdp.eval('window.TONGTOU.state.dev')) === false,
+        await cdp.eval('window.TONGTOU.state.mode'));
+      ok('the prompt fits a phone',
+        (await cdp.eval(`(() => {
+          const p = document.querySelector('#dev-unlock .panel').getBoundingClientRect();
+          return p.top >= 0 && p.bottom <= window.innerHeight + 1;
+        })()`)) === true);
+      await tap(await centreOf('#dev-unlock [data-act="dev-cancel"]'));
+      await sleep(300);
+      ok('backing out leaves it locked',
+        (await cdp.eval('window.TONGTOU.state.dev')) === false
+        && (await cdp.eval('window.TONGTOU.state.mode')) === 'settings',
+        await cdp.eval('window.TONGTOU.state.mode'));
+      await tap(await centreOf('#settings [data-act="back"]'));
+      await sleep(400);
+    }
+
     const playBtn = await centreOf('#title-menu [data-act="play"]');
     ok('menu buttons are tappable in the hand-held layout', !!playBtn,
       playBtn ? `(${playBtn.x},${playBtn.y})` : 'not found');

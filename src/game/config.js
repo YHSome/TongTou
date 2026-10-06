@@ -340,8 +340,6 @@ export const DEFAULTS = {
   noteTravel: 0.82,      // fall time at speed 1.0, in seconds
   hitFx: 'strong',       // hit-feedback intensity
   backgroundDim: 0.55,
-  bgaDim: 0.78,
-  bga: true,
   visualizer: true,
   showKeyCues: true,
   showOffsetGuide: false,  // forced on briefly while the offset slider is moved
@@ -462,6 +460,5 @@ export const DEFAULT_TRACK = {
   title: '雨爱',
   artist: '杨丞琳',
   audio: 'src/雨爱.mp3',
-  bga: 'src/雨爱.mp4',
   chart: 'src/chart/雨爱.json',
 };

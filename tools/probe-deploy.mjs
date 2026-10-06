@@ -146,17 +146,18 @@ async function main() {
       ok('all three difficulty tiers came with it',
         tiers.join(',') === 'hard,expert,extra', tiers.join(','));
 
-      // the video is the one asset big enough to expose a host's limits
-      const ready = await cdp.eval(`(() => {
-        const v = document.getElementById('bga');
-        return JSON.stringify({ src: v.currentSrc || v.src, readyState: v.readyState,
-          networkState: v.networkState, duration: v.duration || null });
+      // the page used to carry a 69 MB BGA video; with it gone the whole site is
+      // a couple of megabytes, which is the point of removing it
+      const weight = await cdp.eval(`(() => {
+        const nav = performance.getEntriesByType('navigation')[0] || {};
+        const res = performance.getEntriesByType('resource');
+        const total = res.reduce((a, r) => a + (r.transferSize || r.decodedBodySize || 0), 0);
+        return Math.round(total / 1048576 * 10) / 10;
       })()`);
-      const v = JSON.parse(ready);
-      console.log(`  bga: readyState=${v.readyState} networkState=${v.networkState} duration=${v.duration}`);
-      ok('the video element found its source on the host', /^https?:/.test(v.src), v.src);
-      ok('the video is actually fetching (not a 404)', v.networkState !== 3,
-        `networkState=${v.networkState}`);
+      console.log(`  transferred: ~${weight} MB (excluding the document itself)`);
+      ok('the page is light enough to open on a phone plan', weight < 12, `${weight} MB`);
+      ok('no video is being fetched any more',
+        (await cdp.eval(`document.querySelectorAll('video').length`)) === 0);
 
       // play a real run: audio, chart, judgement and rendering all at once
       await key('Enter', 'Enter', 13, '\r');

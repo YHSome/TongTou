@@ -104,8 +104,6 @@ export const DEV_SPECS = [
     options: [['auto', '自动'], ['desktop', '桌面（BMS 竖条）'], ['handheld', '全宽四轨']],
   },
   { group: '画面', key: 'backgroundDim', label: '整体压暗', type: 'range', min: 0, max: 0.95, step: 0.01, fmt: (v) => v.toFixed(2) },
-  { group: '画面', key: 'bga', label: '播放 BGA', type: 'bool' },
-  { group: '画面', key: 'bgaDim', label: 'BGA 亮度', type: 'range', min: 0.1, max: 1, step: 0.02, fmt: (v) => `${Math.round(v * 100)}%` },
   { group: '画面', key: 'visualizer', label: '频谱可视化', type: 'bool' },
   { group: '画面', key: 'showKeyCues', label: '键位提示', type: 'bool' },
   { group: '画面', key: 'fullscreenOnStart', label: '开局全屏', type: 'bool' },

@@ -69,13 +69,12 @@ LEAD_IN = 1.0
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTDIR = os.path.join(ROOT, "src", "chart")
 
-# The supplied BGA is a cover-version lyric video, so the original-artist credit
-# would be misleading. Edit these lines to label a different track.
+# The supplied audio is a cover version, so the original-artist credit would be
+# misleading. Edit these lines to label a different track.
 TRACK = {
     "title": "雨爱",
     "artist": "翻唱版",
     "audio": "../雨爱.mp3",
-    "bga": "../雨爱.mp4",
 }
 
 # --------------------------------------------------------------------------- #
@@ -754,7 +753,7 @@ def main():
         "format": "tongtou-chart/1",
         "meta": {
             "title": TRACK["title"], "artist": TRACK["artist"],
-            "audio": TRACK["audio"], "bga": TRACK["bga"],
+            "audio": TRACK["audio"],
             "duration": round(dur, 3),
             "bpm": round(float(bpm), 4),
             "offset": round(float(phase), 6),
