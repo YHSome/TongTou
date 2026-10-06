@@ -246,6 +246,37 @@ async function main() {
     check('the stage still paints its own background',
       bgaLeftovers.background === true);
 
+    // ---- the stage artwork -----------------------------------------------
+    // Loading the image and waiting for it to decode is the only thing that
+    // proves the asset resolves: a wrong path or a missing file shows up as an
+    // empty layer and no error anywhere else.
+    const art = JSON.parse(await cdp.eval(`(async () => {
+      const el = document.querySelector('.stage-art');
+      const raw = getComputedStyle(el).backgroundImage;
+      const m = /url\\(["']?([^"')]+)["']?\\)/.exec(raw);
+      const url = m ? m[1] : '';
+      const img = new Image();
+      const loaded = await new Promise((res) => {
+        img.onload = () => res(true);
+        img.onerror = () => res(false);
+        img.src = url;
+      });
+      const veil = document.querySelector('.stage-veil');
+      return JSON.stringify({
+        url, loaded, w: img.naturalWidth, h: img.naturalHeight,
+        filter: getComputedStyle(el).filter,
+        shown: el.offsetWidth > 0,
+        veilAbove: !!veil && veil.offsetWidth > 0,
+      });
+    })()`));
+    console.log(`  stage art: ${art.url} -> ${art.loaded ? `${art.w}x${art.h}` : 'FAILED'}`
+      + ` (${art.filter})`);
+    check('the stage artwork is in the layer stack', art.url.length > 0 && art.shown, art.url);
+    check('the artwork asset actually loads and decodes', art.loaded === true, art.url);
+    check('it is drawn behind the vignette', art.veilAbove === true);
+    // 300x300 blown up to the viewport, so it has to be softened on purpose
+    check('the upscale is blurred rather than blocky', /blur\(/.test(art.filter), art.filter);
+
     // ---- enter select + play --------------------------------------------
     // CDP input events are trusted, so they grant user activation the way a
     // real key press does.  A synthetic KeyboardEvent from Runtime.evaluate is

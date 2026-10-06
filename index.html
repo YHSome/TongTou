@@ -89,8 +89,11 @@
   <!-- background layers                                                    -->
   <!-- ------------------------------------------------------------------ -->
   <div id="stage">
-    <!-- warm grade driven by the concert pyro; sits over the stage background,
-         under the canvas -->
+    <!-- stage backdrop, then the vignette that keeps the HUD readable over it -->
+    <div class="stage-art" aria-hidden="true"></div>
+    <div class="stage-veil" aria-hidden="true"></div>
+    <!-- warm grade driven by the concert pyro; sits over the backdrop, under the
+         canvas -->
     <div id="grade" class="grade"></div>
     <canvas id="view" class="view"></canvas>
     <!-- a phone has no Esc key, so the run needs a way out -->

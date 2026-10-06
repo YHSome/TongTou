@@ -159,6 +159,23 @@ async function main() {
       ok('no video is being fetched any more',
         (await cdp.eval(`document.querySelectorAll('video').length`)) === 0);
 
+      // the artwork is the newest asset and a `url()` in a stylesheet is exactly
+      // what a subdirectory host breaks — the page still "works", it just has no
+      // background, and nothing logs an error
+      const art = JSON.parse(await cdp.eval(`(async () => {
+        const el = document.querySelector('.stage-art');
+        const raw = getComputedStyle(el).backgroundImage;
+        const m = /url\\(["']?([^"')]+)["']?\\)/.exec(raw);
+        const url = m ? m[1] : '';
+        const img = new Image();
+        const loaded = await new Promise((res) => {
+          img.onload = () => res(true); img.onerror = () => res(false); img.src = url;
+        });
+        return JSON.stringify({ url, loaded, w: img.naturalWidth });
+      })()`));
+      console.log(`  stage art: ${art.url} -> ${art.loaded ? `${art.w}px` : 'FAILED'}`);
+      ok('the stage artwork resolves and decodes on the host', art.loaded === true, art.url);
+
       // play a real run: audio, chart, judgement and rendering all at once
       await key('Enter', 'Enter', 13, '\r');
       await key('Enter', 'Enter', 13, '\r');

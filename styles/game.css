@@ -70,19 +70,61 @@ body { cursor: default; }
 /* background stage                                                       */
 /* -------------------------------------------------------------------- */
 
-/* There is no BGA video any more — a 69 MB asset for a background was the
-   single heaviest thing on the page, and it read worse under the lanes than a
-   dark field does.  What is left is the gradient, plus the vignette that used
-   to sit over the video to keep the HUD legible. */
+/* The stage is three layers: a gradient base, the artwork, and a vignette.
+   Order matters — the gradient is the parent's own background and therefore
+   paints *behind* every child, so the vignette has to be its own element on
+   top of the art rather than a second background layer on `#stage`. */
 #stage {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  background: radial-gradient(120% 90% at 20% 10%, #131c33 0%, #070a13 55%, #04060b 100%);
+}
+
+.stage-art {
+  position: absolute;
+  /* a little oversized so the blur never leaves a pale edge inside the frame */
+  inset: -6%;
+  background-image: url("../assets/stage.png");
+  background-size: cover;
+  background-position: center 42%;
+  background-repeat: no-repeat;
+  /* The source is 300×300, so at 4K it is a twelve-fold upscale and the pixels
+     would read as blocks.  A blur turns that into an intentional soft backdrop
+     — which is also what a background sitting under four lanes of notes wants
+     to be.  It is a static layer, so the filter is composited once, not per
+     frame.  The brightness lift is there because two darkening layers (the veil
+     and the canvas dim) sit on top of it. */
+  filter: blur(clamp(8px, 1.7vmin, 30px)) saturate(1.15) brightness(1.5);
+}
+
+/* The vignette the video used to get from a dedicated layer.  It is much lighter
+   than the old video one: that was tuned to beat a busy 1080p MV into
+   submission, and this is a soft, already-low-contrast still — at the old
+   values it crushed the picture to near-black before the canvas dim even got to
+   it. */
+.stage-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(4, 6, 11, .92) 0%, rgba(4, 6, 11, .58) 42%, rgba(4, 6, 11, .30) 68%, rgba(4, 6, 11, .62) 100%),
-    radial-gradient(140% 110% at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .55) 100%),
-    radial-gradient(120% 90% at 20% 10%, #131c33 0%, #070a13 55%, #04060b 100%);
+    linear-gradient(90deg, rgba(4, 6, 11, .70) 0%, rgba(4, 6, 11, .34) 42%, rgba(4, 6, 11, .12) 68%, rgba(4, 6, 11, .38) 100%),
+    radial-gradient(140% 110% at 50% 50%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .40) 100%);
+}
+
+/* the developer screen can put the gradient back on its own */
+body[data-bgart="0"] .stage-art { display: none; }
+
+/* On a phone the four lanes cover the whole screen, so the artwork ends up
+   directly behind the notes instead of off to the side of them.  The desktop
+   veil is a left-to-right gradient because the HUD owns the left third there;
+   here it becomes a top-to-bottom one, heavier overall, so that what is behind
+   the notes is texture and not a picture. */
+body[data-layout="handheld"] .stage-veil {
+  background:
+    linear-gradient(180deg, rgba(4, 6, 11, .58) 0%, rgba(4, 6, 11, .40) 38%, rgba(4, 6, 11, .58) 100%),
+    radial-gradient(130% 100% at 50% 50%, rgba(0, 0, 0, .12) 28%, rgba(0, 0, 0, .54) 100%);
 }
 
 .view {

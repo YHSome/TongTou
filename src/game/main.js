@@ -109,6 +109,7 @@ function applySettingsToLive() {
   input.setBindings(settings.laneKeys);
   // seed the renderer so the very first frame already uses the right intensity
   renderer.fxLevel = settings.hitFx || 'normal';
+  document.body.dataset.bgart = settings.stageArt === false ? '0' : '1';
   lastGrade = -1;                 // force the next frame to repaint the grade
   applyFireGrade(0);
   updateKeyHints();

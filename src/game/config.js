@@ -340,6 +340,7 @@ export const DEFAULTS = {
   noteTravel: 0.82,      // fall time at speed 1.0, in seconds
   hitFx: 'strong',       // hit-feedback intensity
   backgroundDim: 0.55,
+  stageArt: true,          // the backdrop image behind the playfield
   visualizer: true,
   showKeyCues: true,
   showOffsetGuide: true,   // live ±ms readout after each judgement
